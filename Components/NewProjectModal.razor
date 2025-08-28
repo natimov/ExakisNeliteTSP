@@ -1,0 +1,131 @@
+﻿@using ExakisNeliteTSP.Models
+@inject ExakisNeliteTSP.Services.IProjectService Projects
+
+@if (Visible)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background:rgba(0,0,0,.5)">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+
+                <div class="modal-header">
+                    <h5 class="modal-title">Nouveau Projet</h5>
+                    <button type="button" class="btn-close" @onclick="Close" aria-label="Fermer"></button>
+                </div>
+
+                <EditForm Model="@model" OnValidSubmit="Create">
+                    <DataAnnotationsValidator />
+
+                    <div class="modal-body">
+
+                        <div class="mb-3">
+                            <label class="form-label">Titre du projet *</label>
+                            <InputText class="form-control" @bind-Value="model.Title" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Client *</label>
+                            <InputText class="form-control" @bind-Value="model.Client" />
+                        </div>
+
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Complexité *</label>
+                                <InputSelect class="form-select" @bind-Value="model.Complexity">
+                                    @foreach (var c in Enum.GetValues<Complexity>())
+                                    {
+                                        <option value="@c">@Label(c)</option>
+                                    }
+                                </InputSelect>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Statut *</label>
+                                <InputSelect class="form-select" @bind-Value="model.Status">
+                                    @foreach (var s in Enum.GetValues<ProjectStatus>())
+                                    {
+                                        <option value="@s">@Label(s)</option>
+                                    }
+                                </InputSelect>
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mt-1">
+                            <div class="col-md-6">
+                                <label class="form-label">Chef de projet *</label>
+                                <InputText class="form-control" @bind-Value="model.ProjectLead" />
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Date de début *</label>
+                                <InputDate class="form-control" @bind-Value="model.StartDate" />
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Date de fin prévue *</label>
+                                <InputDate class="form-control" @bind-Value="model.DueDate" />
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <div class="modal-footer">
+                        <button class="btn btn-outline-secondary" type="button" @onclick="Close">Annuler</button>
+                        <button class="btn btn-primary" type="submit">Créer le projet</button>
+                    </div>
+                </EditForm>
+
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Visible { get; set; }
+    [Parameter] public EventCallback<bool> VisibleChanged { get; set; } // pour @bind-Visible
+    [Parameter] public EventCallback OnCreated { get; set; }
+
+    private Project model = new();
+
+    private async Task Create()
+    {
+        // Validation minimale côté code (utile si tu n’as pas encore de DataAnnotations)
+        if (string.IsNullOrWhiteSpace(model.Title) ||
+            string.IsNullOrWhiteSpace(model.Client) ||
+            string.IsNullOrWhiteSpace(model.ProjectLead) ||
+            model.StartDate is null ||
+            model.DueDate is null)
+        {
+            return;
+        }
+
+        await Projects.CreateAsync(model);
+        await OnCreated.InvokeAsync();       // rafraîchir la liste parent
+        model = new();                       // reset formulaire
+
+        if (VisibleChanged.HasDelegate)
+            await VisibleChanged.InvokeAsync(false); // fermer la modale
+    }
+
+    private async Task Close()
+    {
+        if (VisibleChanged.HasDelegate)
+            await VisibleChanged.InvokeAsync(false);
+    }
+
+    // Libellés FR
+    private static string Label(ProjectStatus s) => s switch
+    {
+        ProjectStatus.Draft => "Brouillon",
+        ProjectStatus.InReview => "En attente de retour",
+        ProjectStatus.ValidationPending => "En attente de validation",
+        ProjectStatus.InProgress => "En cours",
+        ProjectStatus.Done => "Terminé",
+        ProjectStatus.OnHold => "En pause",
+        _ => s.ToString()
+    };
+
+    private static string Label(Complexity c) => c switch
+    {
+        Complexity.Simple => "Simple",
+        Complexity.Medium => "Moyenne",
+        Complexity.Complex => "Complexe",
+        _ => c.ToString()
+    };
+}

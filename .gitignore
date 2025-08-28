@@ -1,0 +1,23 @@
+# Fichiers de Visual Studio
+.vs/
+*.user
+*.suo
+
+# Dossiers de build
+bin/
+obj/
+[Bb]uild/
+[Ll]og/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+
+# Fichiers temporaires
+*.tmp
+*.log
+
+# Autres
+*.cache
