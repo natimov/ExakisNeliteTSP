@@ -1,35 +1,52 @@
-﻿@page "/Projets"
-@attribute [StreamRendering]
+﻿@page "/projets"
+@using ExakisNeliteTSP.Models
+@using ExakisNeliteTSP.Services.Interface
+@inject IProjectService Projects
 
-<PageTitle>Projets</PageTitle>
+<h3 class="mb-3">Tous les projets</h3>
 
-<h1>Projets</h1>
-
-<p>This component demonstrates showing data.</p>
-
-@if (forecasts == null)
+@if (loading)
 {
-    <p><em>Loading...</em></p>
+    <div class="text-muted">Chargement…</div>
+}
+else if (!string.IsNullOrEmpty(error))
+{
+    <div class="alert alert-danger">@error</div>
 }
 else
 {
+    <div class="text-muted mb-2">@all.Count projet(s)</div>
+
     <table class="table">
         <thead>
             <tr>
-                <th>Date</th>
-                <th>Temp. (C)</th>
-                <th>Temp. (F)</th>
-                <th>Summary</th>
+                <th>Projet</th>
+                <th>Statut</th>
+                <th>Chef de projet</th>
+                <th>Complexité</th>
+                <th>Début</th>
+                <th>Fin prévue</th>
+                <th>Dernière MAJ</th>
+                <th></th>
             </tr>
         </thead>
         <tbody>
-            @foreach (var forecast in forecasts)
+            @foreach (var p in all)
             {
                 <tr>
-                    <td>@forecast.Date.ToShortDateString()</td>
-                    <td>@forecast.TemperatureC</td>
-                    <td>@forecast.TemperatureF</td>
-                    <td>@forecast.Summary</td>
+                    <td>
+                        <strong>@p.Title</strong>
+                        <div class="text-muted small">@p.Client</div>
+                    </td>
+                    <td>@Badge(p.Status)</td>
+                    <td>@p.ProjectLead</td>
+                    <td>@Label(p.Complexity)</td>
+                    <td>@(p.StartDate?.ToString("dd/MM/yyyy"))</td>
+                    <td>@(p.DueDate?.ToString("dd/MM/yyyy"))</td>
+                    <td>@p.LastUpdated.ToLocalTime().ToString("dd/MM/yyyy")</td>
+                    <td>
+                        <a class="btn btn-sm btn-outline-primary" href="@($"/TSProjet/{p.Id}")">Ouvrir ↗</a>
+                    </td>
                 </tr>
             }
         </tbody>
@@ -37,28 +54,62 @@ else
 }
 
 @code {
-    private WeatherForecast[]? forecasts;
+    private List<Project> all = new();
+    private bool loading = true;
+    private string? error;
 
     protected override async Task OnInitializedAsync()
     {
-        // Simulate asynchronous loading to demonstrate streaming rendering
-        await Task.Delay(500);
-
-        var startDate = DateOnly.FromDateTime(DateTime.Now);
-        var summaries = new[] { "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching" };
-        forecasts = Enumerable.Range(1, 5).Select(index => new WeatherForecast
+        try
         {
-            Date = startDate.AddDays(index),
-            TemperatureC = Random.Shared.Next(-20, 55),
-            Summary = summaries[Random.Shared.Next(summaries.Length)]
-        }).ToArray();
+            // Récupère tout et ordonne du plus récent au plus ancien
+            var items = await Projects.GetAllAsync();
+            all = items.OrderByDescending(p => p.LastUpdated).ToList();
+        }
+        catch (Exception ex)
+        {
+            error = "Impossible de charger les projets : " + ex.Message;
+        }
+        finally
+        {
+            loading = false;
+        }
     }
 
-    private class WeatherForecast
+    // Libellés FR
+    private static string Label(ProjectStatus s) => s switch
     {
-        public DateOnly Date { get; set; }
-        public int TemperatureC { get; set; }
-        public string? Summary { get; set; }
-        public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-    }
+        ProjectStatus.Draft => "Brouillon",
+        ProjectStatus.InReview => "En attente de retour",
+        ProjectStatus.ValidationPending => "En attente de validation",
+        ProjectStatus.InProgress => "En cours",
+        ProjectStatus.Done => "Terminé",
+        ProjectStatus.OnHold => "En pause",
+        _ => s.ToString()
+    };
+
+    private static string Label(Complexity c) => c switch
+    {
+        Complexity.Simple => "Simple",
+        Complexity.Medium => "Moyenne",
+        Complexity.Complex => "Complexe",
+        _ => c.ToString()
+    };
+
+    private RenderFragment Badge(ProjectStatus s) => builder =>
+    {
+        var cls = s switch
+        {
+            ProjectStatus.InProgress => "badge bg-primary",
+            ProjectStatus.InReview => "badge bg-warning text-dark",
+            ProjectStatus.ValidationPending => "badge bg-info",
+            ProjectStatus.Done => "badge bg-success",
+            ProjectStatus.OnHold => "badge bg-secondary",
+            _ => "badge bg-light text-dark"
+        };
+        builder.OpenElement(0, "span");
+        builder.AddAttribute(1, "class", cls);
+        builder.AddContent(2, Label(s));
+        builder.CloseElement();
+    };
 }

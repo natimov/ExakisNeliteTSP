@@ -1,5 +1,6 @@
 ﻿@using ExakisNeliteTSP.Models
-@inject ExakisNeliteTSP.Services.IProjectService Projects
+@using ExakisNeliteTSP.Services.Interface
+@inject IProjectService Projects
 
 @if (Visible)
 {
@@ -26,7 +27,7 @@
                             <label class="form-label">Client *</label>
                             <InputText class="form-control" @bind-Value="model.Client" />
                         </div>
-
+                        <!-- Statut & Complexité -->
                         <div class="row g-3">
                             <div class="col-md-6">
                                 <label class="form-label">Complexité *</label>
@@ -37,9 +38,12 @@
                                     }
                                 </InputSelect>
                             </div>
+
                             <div class="col-md-6">
                                 <label class="form-label">Statut *</label>
-                                <InputSelect class="form-select" @bind-Value="model.Status">
+                                <InputSelect class="form-select"
+                                             @bind-Value="model.Status"
+                                             @onchange="OnStatusChanged">
                                     @foreach (var s in Enum.GetValues<ProjectStatus>())
                                     {
                                         <option value="@s">@Label(s)</option>
@@ -47,6 +51,31 @@
                                 </InputSelect>
                             </div>
                         </div>
+
+                        @* PHASE — visible uniquement si Statut = En cours *@
+                        @if (model.Status == ProjectStatus.InProgress)
+                        {
+                            <div class="row g-3 mt-1">
+                                <div class="col-md-6">
+                                    <label class="form-label">Phase (En cours)</label>
+                                    <InputSelect class="form-select"
+                                                 TValue="ProjectPhase?"
+                                                 @bind-Value="model.Phase">
+                                        <!-- valeur vide => null -->
+                                        <option value="">—</option>
+                                        @foreach (var ph in Enum.GetValues<ProjectPhase>())
+                                        {
+                                            if (ph == ProjectPhase.None) { continue; }
+                                            <option value="@ph">@Label(ph)</option>
+                                        }
+                                    </InputSelect>
+                                </div>
+                            </div>
+                        }
+
+                       
+                        
+
 
                         <div class="row g-3 mt-1">
                             <div class="col-md-6">
@@ -102,12 +131,29 @@
         if (VisibleChanged.HasDelegate)
             await VisibleChanged.InvokeAsync(false); // fermer la modale
     }
+    private void OnStatusChanged(ChangeEventArgs _)
+    {
+        if (model.Status != ProjectStatus.InProgress)
+            model.Phase = null;   // si on quitte "En cours", on efface la phase
+    }
+
 
     private async Task Close()
     {
         if (VisibleChanged.HasDelegate)
             await VisibleChanged.InvokeAsync(false);
     }
+    private ProjectStatus Status
+    {
+        get => model.Status;
+        set
+        {
+            model.Status = value;
+            if (value != ProjectStatus.InProgress)
+                model.Phase = null; // on efface la phase si non pertinente
+        }
+    }
+
 
     // Libellés FR
     private static string Label(ProjectStatus s) => s switch
@@ -128,4 +174,18 @@
         Complexity.Complex => "Complexe",
         _ => c.ToString()
     };
+    private static string Label(ProjectPhase ph) => ph switch
+    {
+        ProjectPhase.None => "—",
+        ProjectPhase.Pilotage => "Pilotage",
+        ProjectPhase.Conception => "Conception",
+        ProjectPhase.Construction => "Construction",
+        ProjectPhase.Validation => "Validation",
+        ProjectPhase.Finalisation => "Finalisation",
+        ProjectPhase.Garantie => "Garantie",
+        ProjectPhase.TMA => "TMA",
+        ProjectPhase.Provision => "Provision",
+        _ => ph.ToString()
+    };
+
 }

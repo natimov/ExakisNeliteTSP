@@ -1,9 +1,10 @@
 ﻿@page "/"
-@inject ExakisNeliteTSP.Services.IProjectService Projects
+@inject IProjectService Projects
 @using ExakisNeliteTSP.Models
-@inject ExakisNeliteTSP.Services.IConsultantDirectoryService Directory
+@using ExakisNeliteTSP.Services.Interface
+@inject IConsultantDirectoryService Directory
 @using ExakisNeliteTSP.Components
-@inject ExakisNeliteTSP.Services.IAbsenceService Absences
+@inject IAbsenceService Absences
 
 
 
@@ -12,13 +13,13 @@
 
 <div class="row g-3 mb-3">
   <KpiCard Title="Projets en cours"         Value="@inProgress" />
-    <KpiCard Title="En attente de validation par le client" Value="@ValidationPending" />
+    <KpiCard Title="En attente de signature" Value="@ValidationPending" />
     <KpiCard Title="Consultants actifs" Value="@activeConsultants" />
   
 
   <KpiCard Title="Consultants en inter-contrat" Value="@benchConsultants" />
     <KpiCard Title="Projets terminés" Value="@done" />
-    <KpiCard Title="En attente de retour" Value="@inReview" />
+    <KpiCard Title="En attente de validation" Value="@inReview" />
 
     <KpiCard Title="Projets en brouillon" Value="@draft" />
 
@@ -27,22 +28,14 @@
 
 </div>
 
-<div class="d-flex align-items-center justify-content-between">
-  <h5 class="mb-0">Projets récents</h5>
-  <div class="d-flex gap-2">
-    <input class="form-control" style="width:260px" placeholder="Rechercher…" @bind="search" @oninput="e=>ApplyFilters()" />
-    <InputSelect class="form-select" style="width:180px" @bind-Value="statusFilter" @onchange="e=>ApplyFilters()">
-      <option value="">Statut (tous)</option>
-      @foreach (var s in Enum.GetValues<ProjectStatus>())
-      {
-        <!-- value = nom de l'énum (anglais) pour que le TryParse continue de fonctionner -->
-        <option value="@s">@Label(s)</option>
-      }
-    </InputSelect>
-    <button class="btn btn-outline-secondary" @onclick="ClearFilters">X</button>
-    <button class="btn btn-primary" @onclick="()=>showNew=true">+ Nouveau projet</button>
-  </div>
+<div class="d-flex align-items-center justify-content-between mt-3">
+    <h5 class="mb-0">Projets récents</h5>
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline-primary" href="/projets">Voir tous les projets</a>
+        <button class="btn btn-primary" @onclick="() => showNew = true">+ Nouveau projet</button>
+    </div>
 </div>
+
 
 <table class="table mt-2">
     <thead>
@@ -66,13 +59,13 @@
                     <strong>@p.Title</strong>
                     <div class="text-muted small">@p.Client</div>
                 </td>
-                <td>@Badge(p.Status)</td>
+                <td>@StatusWithPhase(p.Status, p.Phase)</td>
                 <td>@p.ProjectLead</td>
                 <td>@Label(p.Complexity)</td>
                 <td>@(p.StartDate?.ToString("dd/MM/yyyy"))</td>
                 <td>@(p.DueDate?.ToString("dd/MM/yyyy"))</td>
                 <td>@p.LastUpdated.ToLocalTime().ToString("dd/MM/yyyy")</td>
-                <td><a class="btn btn-sm btn-outline-primary" href="@($"/project/{p.Id}")">Ouvrir ↗</a></td>
+                <td><a class="btn btn-sm btn-outline-primary" href="@($"/TSProjet/{p.Id}")">Ouvrir ↗</a></td>
             </tr>
 
     }
@@ -140,20 +133,18 @@
         _ => c.ToString()
     };
 
+    private const int HomeTopCount = 8; // configurable
 
-  private void ApplyFilters()
-  {
-    IEnumerable<Project> q = projects;
+    private void ApplyFilters()
+    {
+        filtered = projects
+            .OrderByDescending(p => p.LastUpdated)
+            .Take(HomeTopCount)
+            .ToList();
+        // StateHasChanged(); // inutile ici
+    }
 
-    if (!string.IsNullOrWhiteSpace(search))
-      q = q.Where(p => (p.Title + " " + p.Client).Contains(search, StringComparison.OrdinalIgnoreCase));
-
-    if (!string.IsNullOrWhiteSpace(statusFilter) && Enum.TryParse<ProjectStatus>(statusFilter, out var st))
-      q = q.Where(p => p.Status == st);
-
-    filtered = q.ToList();
-    StateHasChanged();
-  }
+ 
 
   private void ClearFilters()
   {
@@ -166,9 +157,9 @@
   {
     ProjectStatus.Draft => "Brouillon",
     ProjectStatus.InProgress => "En cours",
-    ProjectStatus.InReview   => "En attente de retour",
+    ProjectStatus.InReview   => "En attente de validation",
     ProjectStatus.Done       => "Terminé",
-    ProjectStatus.ValidationPending   => "En attente de validation",
+    ProjectStatus.ValidationPending   => "En attente de singature",
     ProjectStatus.OnHold     => "En pause",
     _                        => s.ToString()
   };
@@ -188,4 +179,45 @@
     builder.AddContent(2, Label(s)); // affiche le libellé FR
     builder.CloseElement();
   };
+    private static string Label(ProjectPhase ph) => ph switch
+    {
+        ProjectPhase.None => "—",
+        ProjectPhase.Pilotage => "Pilotage",
+        ProjectPhase.Conception => "Conception",
+        ProjectPhase.Construction => "Construction",
+        ProjectPhase.Validation => "Validation",
+        ProjectPhase.Finalisation => "Finalisation",
+        ProjectPhase.Garantie => "Garantie",
+        ProjectPhase.TMA => "TMA",
+        ProjectPhase.Provision => "Provision",
+        _ => ph.ToString()
+    };
+    private RenderFragment StatusWithPhase(ProjectStatus s, ProjectPhase? ph) => builder =>
+{
+    // badge statut (comme avant)
+    var cls = s switch
+    {
+        ProjectStatus.InProgress => "badge bg-primary",
+        ProjectStatus.InReview => "badge bg-warning text-dark",
+        ProjectStatus.ValidationPending => "badge bg-info",
+        ProjectStatus.Done => "badge bg-success",
+        ProjectStatus.OnHold => "badge bg-secondary",
+        _ => "badge bg-light text-dark"
+    };
+    builder.OpenElement(0, "span");
+    builder.AddAttribute(1, "class", cls);
+    builder.AddContent(2, Label(s));
+    builder.CloseElement();
+
+    // si "En cours" + phase, on ajoute un 2e badge bleu, à droite
+    if (s == ProjectStatus.InProgress && ph is ProjectPhase p && p != ProjectPhase.None)
+    {
+        builder.OpenElement(3, "span");
+        builder.AddAttribute(4, "class", "badge bg-primary ms-1"); // même bleu + petit espace
+        builder.AddContent(5, Label(p));
+        builder.CloseElement();
+    }
+};
+
+
 }

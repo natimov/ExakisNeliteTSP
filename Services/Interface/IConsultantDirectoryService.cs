@@ -1,4 +1,4 @@
-﻿namespace ExakisNeliteTSP.Services;
+﻿namespace ExakisNeliteTSP.Services.Interface;
 
 public interface IConsultantDirectoryService
 {

@@ -1,0 +1,40 @@
+﻿@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+
+<div class="d-flex align-items-center gap-2" title="@displayName">
+    <span class="rounded-circle d-inline-flex align-items-center justify-content-center
+                 bg-primary text-white"
+          style="width:32px;height:32px;">
+        <!-- Icône toujours visible, avec Bootstrap Icons -->
+        <i class="bi bi-person" style="font-size:1.1rem; line-height:1;"></i>
+    </span>
+    <span class="fw-medium">@displayName</span>
+</div>
+
+@code {
+    [CascadingParameter] public Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    private string displayName = "timothee.nenin@exakis-nelite.com";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (AuthenticationStateTask is null) return;
+
+        var user = (await AuthenticationStateTask).User;
+
+        if (user?.Identity?.IsAuthenticated == true)
+        {
+            displayName =
+                user.FindFirst("name")?.Value ??
+                user.FindFirst(ClaimTypes.Name)?.Value ??
+                user.Identity?.Name ??
+                user.FindFirst("preferred_username")?.Value ??
+                user.FindFirst(ClaimTypes.Email)?.Value ??
+                "Utilisateur";
+        }
+        else
+        {
+            displayName = "Non connecté";
+        }
+    }
+}

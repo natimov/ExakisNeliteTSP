@@ -1,4 +1,6 @@
-﻿namespace ExakisNeliteTSP.Services;
+﻿using ExakisNeliteTSP.Services.Interface;
+
+namespace ExakisNeliteTSP.Services;
 
 public sealed class InMemoryConsultantDirectoryService : IConsultantDirectoryService
 {
