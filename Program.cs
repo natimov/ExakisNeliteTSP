@@ -28,6 +28,10 @@ builder.Services.AddScoped<IProjectProfilRowsService, EfProfilRowsService>();
 builder.Services.AddServerSideBlazor().AddCircuitOptions(o => o.DetailedErrors = true);
 builder.Services.AddScoped<IProjectProfileMonthlyService, EfProjectProfileMonthlyService>();
 builder.Services.AddScoped<IProjectTjmService, ProjectTjmService>();
+builder.Services.AddScoped<IProjectAchatService, ProjectAchatService>();
+builder.Services.AddScoped<IProjectAchatPrestataireService, ProjectAchatPrestataireService>();
+builder.Services.AddScoped<IProjectFraisService, ProjectFraisService>();
+builder.Services.AddScoped<IProjectEcheancierService, EFEcheancierService>();
 
 
 // .cs

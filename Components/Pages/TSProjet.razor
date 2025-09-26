@@ -9,12 +9,234 @@
 @using System.Globalization
 @inject IProjectProfileMonthlyService ProfileMonthlySvc
 @inject ExakisNeliteTSP.Services.Interface.IProjectTjmService ProjectTjmSvc
+@inject IProjectAchatService AchatSvc
+@inject IProjectAchatPrestataireService PrestasSvc
+@inject IProjectFraisService FraisSvc
+@inject IProjectEcheancierService EcheancierSvc
+@inject ExakisNeliteTSP.Services.Interface.IProjectEcheancierService EcheancierSvc
+@using System.Globalization
+
+
+
 
 
 
 
 
 @code {
+
+    // JH multi-années : (profilId, year, month 1..12) -> Jours-Homme
+    private Dictionary<(int profilId, int year, int month), decimal> _jhAllYears = new();
+
+    
+    private readonly System.Globalization.CultureInfo fro =
+        System.Globalization.CultureInfo.GetCultureInfo("fr-FR");
+    // ====================== ÉCHÉANCIER – ÉTAT ======================
+    private List<EcheancierItem> echeanciers = new();
+
+    // Liste déroulante des mois (clé "yyyy-MM", libellé FR)
+    private sealed record MonthOpt(int Year, int Month, string Label)
+    {
+        public string Key => $"{Year:D4}-{Month:D2}";
+    }
+    private List<MonthOpt> EcheancierMonthOptions = new();
+
+    private void EnsureEcheancierMonthOptions()
+    {
+        if (EcheancierMonthOptions.Count > 0) return;
+
+        var fr = System.Globalization.CultureInfo.GetCultureInfo("fr-FR");
+        var start = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1).AddMonths(-6);
+
+        for (int i = 0; i < 36; i++)
+        {
+            var d = start.AddMonths(i);
+            EcheancierMonthOptions.Add(new MonthOpt(d.Year, d.Month, d.ToString("MMM-yy", fr)));
+        }
+    }
+
+    // Helpers de binding "clé mois" <-> (BillingYear, BillingMonth)
+    private static string EchGetMonthKey(EcheancierItem r) => $"{r.BillingYear:D4}-{r.BillingMonth:D2}";
+    private static void EchSetMonthKey(EcheancierItem r, string key)
+    {
+        if (string.IsNullOrWhiteSpace(key) || key.Length < 7) return;
+        if (int.TryParse(key.AsSpan(0, 4), out var y) &&
+            int.TryParse(key.AsSpan(5, 2), out var m))
+        {
+            r.BillingYear = y;
+            r.BillingMonth = Math.Clamp(m, 1, 12);
+        }
+    }
+
+    private async Task EchLoadAsync()
+    {
+        if (project is null) return;
+        echeanciers = await EcheancierSvc.LoadAsync(project.Id);
+    }
+
+    private void EchAddRow()
+    {
+        if (project is null) return;
+        var now = DateTime.Today;
+        echeanciers.Add(new EcheancierItem
+        {
+            ProjectId = project.Id,
+            Label = "",
+            Percent = 0m,               // [0..1]
+            BillingYear = now.Year,
+            BillingMonth = now.Month
+        });
+    }
+
+    private async Task EchSaveAsync()
+    {
+        if (project is null) return;
+
+        foreach (var j in echeanciers)
+        {
+            if (j.Percent > 1m) j.Percent /= 100m; // normalisation
+        }
+
+        await EcheancierSvc.SaveAsync(project.Id, echeanciers);
+    }
+
+
+    private async Task EchDeleteAsync(EcheancierItem row)
+    {
+        if (row.Id == 0) echeanciers.Remove(row);
+        else
+        {
+            await EcheancierSvc.DeleteAsync(row.Id);
+            echeanciers.Remove(row);
+        }
+    }
+
+
+    // ====================== VISION FAE – CALCULS ======================
+    
+    private Dictionary<(int year, int month), decimal> FaeBuildCoutEngageCumul()
+    {
+        var result = new Dictionary<(int, int), decimal>();
+
+        if (project?.Profils is null || project.Profils.Count == 0)
+            return result;
+
+        // (1) Recalcule PRCS/CJM si tu le fais déjà
+        ProfilComputeService.ComputeAll(project);
+
+        // (2) Début d’horizon = année de planning (fallback = année courante)
+        int startYear = project.Profils.First().PlanningYear > 0
+            ? project.Profils.First().PlanningYear
+            : DateTime.UtcNow.Year;
+        int startMonth = 1; // si tu as un mois de départ, remplace par ce champ
+
+        var start = new DateTime(startYear, startMonth, 1);
+
+        // (3) Fin d’horizon = dernier jalon (min 12 mois)
+        var lastMilestone = (echeanciers ?? new())
+            .Where(e => e.BillingYear > 0 && e.BillingMonth >= 1 && e.BillingMonth <= 12)
+            .Select(e => new DateTime(e.BillingYear, e.BillingMonth, 1))
+            .DefaultIfEmpty(start)
+            .Max();
+
+        var end = lastMilestone < start.AddMonths(11) ? start.AddMonths(11) : lastMilestone;
+
+        // (4) Nombre de mois à calculer
+        int monthsCount = ((end.Year - start.Year) * 12) + (end.Month - start.Month) + 1;
+
+        decimal cumul = 0m;
+
+        // (5) Boucle calendrier multi-années
+        for (int i = 0; i < monthsCount; i++)
+        {
+            var dt = start.AddMonths(i);
+            decimal coutMois = 0m;
+
+            foreach (var r in project.Profils)
+            {
+                // JH du mois 'dt' via la map multi-années (couvre 2026)
+                decimal jh = 0m;
+                if (r.DbRowId is int pid && _jhAllYears.TryGetValue((pid, dt.Year, dt.Month), out var jhVal))
+                jh = jhVal;
+
+
+
+                // Coût/jour : règle Excel = PRCS prioritaire sinon CJM
+                decimal coutJour = (r.Prcs ?? r.Cjm ?? 0m);
+
+                // + frais/jour si Entite == CESSION (si Excel le fait chez toi)
+                if (r.Entite == EntiteType.CESSION)
+                    coutJour += (r.FraisDeplacementSiCession ?? 0m);
+
+                // (si Excel exclut certains profils, filtre ici)
+                coutMois += jh * coutJour;
+            }
+
+            cumul += coutMois;
+            result[(dt.Year, dt.Month)] = Math.Round(cumul, 2, MidpointRounding.AwayFromZero);
+        }
+
+        return result;
+    }
+
+
+
+    // Facturé cumulé par mois depuis l’Échéancier
+    private Dictionary<(int year, int month), decimal> FaeBuildFactureCumul()
+    {
+        var dict = new SortedDictionary<(int, int), decimal>();
+        if (project is null) return new Dictionary<(int, int), decimal>();
+
+        var contrat = project.ContractAmount ?? 0m;
+
+        foreach (var e in echeanciers)
+        {
+            var amount = contrat * e.Percent;
+            var key = (e.BillingYear, e.BillingMonth);
+            dict[key] = dict.TryGetValue(key, out var cur) ? cur + amount : amount;
+        }
+
+        decimal cumul = 0m;
+        var outDict = new Dictionary<(int, int), decimal>();
+        foreach (var kv in dict)
+        {
+            cumul += kv.Value;
+            outDict[kv.Key] = cumul;
+        }
+        return outDict;
+    }
+
+    // Périmètre des mois à afficher : planning (12 mois) + mois d’échéancier
+    private List<(int year, int month)> FaeBuildRange()
+    {
+        var keys = new HashSet<(int, int)>();
+
+        if (project?.Profils?.FirstOrDefault() is { } first)
+        {
+            var y = first.PlanningYear == 0 ? DateTime.UtcNow.Year : first.PlanningYear;
+            for (int m = 1; m <= 12; m++) keys.Add((y, m));
+        }
+
+        foreach (var e in echeanciers) keys.Add((e.BillingYear, e.BillingMonth));
+
+        return keys.OrderBy(k => k.Item1).ThenBy(k => k.Item2).ToList(); // Item1=year, Item2=month
+    }
+    // Récupère le coût engagé cumulé à la fin d’un mois (ou le dernier mois disponible avant)
+    private decimal GetCoutCumuleA(Dictionary<(int year, int month), decimal> coutCum,
+                                   int year, int month)
+    {
+        // Si la clé existe, on renvoie direct
+        if (coutCum.TryGetValue((year, month), out var v)) return v;
+
+        // Sinon on prend le dernier mois <= demandé
+        var key = coutCum.Keys
+            .Where(k => (k.year < year) || (k.year == year && k.month <= month))
+            .OrderBy(k => k.year).ThenBy(k => k.month)
+            .LastOrDefault();
+
+        return key == default ? 0m : coutCum[key];
+    }
+
     [Parameter] public Guid id { get; set; }
 
     private Project? project;
@@ -54,39 +276,154 @@
                         phasePlans.Add(new PhasePlan { Phase = ph, Year = DateTime.UtcNow.Year });
                     }
                 }// Année de planning (on prend celle du 1er profil, sinon année en cours)
-                var planningYear = project.Profils.FirstOrDefault()?.PlanningYear ?? DateTime.UtcNow.Year;
+                // Année visible par défaut (1re ligne ou année courante)
+                currentYear = project.Profils.FirstOrDefault()?.PlanningYear ?? DateTime.UtcNow.Year;
 
-                // Charger la ventilation mensuelle depuis la BD
-                var monthDict = await ProfileMonthlySvc.LoadAsync(project.Id, planningYear);
-
-                // Réinjecter dans l’UI
-                foreach (var r in project.Profils)
-                {
-                    if (r.DbRowId is int id)
-                    {
-                        r.Months ??= new decimal?[12];
-                        for (int m = 1; m <= 12; m++)
-                        {
-                            if (monthDict.TryGetValue((id, m), out var val))
-                                r.Months[m - 1] = val;
-                            // sinon, on laisse la valeur courante (null si jamais saisie)
-                        }
-                    }
-                }
-
+                // Charge les 12 mois pour currentYear
+                await LoadPlanningYearAsync(currentYear);
                 await LoadTjmAsync();
+                await LoadAchatsAsync();
+                await LoadPrestasAsync();
+                await LoadFraisAsync();
+                EnsureEcheancierMonthOptions();      // remplit la liste des mois
+                await EchLoadAsync();
+                // === CHARGEMENT JH MULTI-ANNÉES POUR LA FAE (couvre 2025, 2026, etc.) ===
+                _jhAllYears.Clear();
+
+                // Horizon = du 1er janv. de l'année de planning au dernier jalon (min 12 mois)
+                int startFAEYear = project!.Profils!.First().PlanningYear > 0 ? project.Profils.First().PlanningYear : DateTime.UtcNow.Year;
+                var startFAE = new DateTime(startFAEYear, 1, 1);
+                var lastMilestoneFAE = (echeanciers ?? new())
+                    .Where(e => e.BillingYear > 0 && e.BillingMonth >= 1 && e.BillingMonth <= 12)
+                    .Select(e => new DateTime(e.BillingYear, e.BillingMonth, 1))
+                    .DefaultIfEmpty(startFAE)
+                    .Max();
+                var endFAE = lastMilestoneFAE < startFAE.AddMonths(11) ? startFAE.AddMonths(11) : lastMilestoneFAE;
+
+                // Charge les JH pour chaque année de l'horizon
+               for (int year = startFAE.Year; year <= endFAE.Year; year++)
+{
+    // Retour du service : (profilDbId, mois) -> decimal? JH
+    var monthDictYear = await ProfileMonthlySvc.LoadAsync(project.Id, year);
+
+    foreach (var r in project.Profils)
+    {
+        if (r.DbRowId is not int pid) continue;
+
+        for (int m = 1; m <= 12; m++)
+        {
+            // dt = mois courant de l’horizon
+            var dt = new DateTime(year, m, 1);
+
+            decimal jh = 0m;
+
+            // 1) Essai clé 1-based (1..12)
+            if (monthDictYear.TryGetValue((pid, m), out var v1) && v1.HasValue)
+                jh = v1.Value;
+            // 2) Essai clé 0-based (0..11)
+            else if (monthDictYear.TryGetValue((pid, m - 1), out var v0) && v0.HasValue)
+                jh = v0.Value;
+            // 3) Fallback UI : r.Months (offset depuis le début d’horizon)
+            else if (r.Months is not null)
+            {
+                int offset = ((dt.Year - startFAE.Year) * 12) + (dt.Month - 1);
+                if (offset >= 0 && offset < r.Months.Length)
+                    jh = r.Months[offset] ?? 0m;
+            }
+
+            _jhAllYears[(pid, year, m)] = jh; // on stocke ce qu’on a trouvé (même si 0)
+        }
+    }
+}
+
+                // === FIN CHARGEMENT JH MULTI-ANNÉES ===
+
+
+
+
 
 
                 // 2) Recalculer les colonnes calculées pour l'affichage
                 ProfilComputeService.ComputeAll(project);
+                var map = FaeBuildCoutEngageCumul();
+                @code {
+    [Inject] private IJSRuntime JS { get; set; } = default!;
+    // ...
+}
+
+                Console.WriteLine($"[FAE] Server: keys={map.Count}, cumul(2026,2)={map.GetValueOrDefault((2026, 2), 0m)}");
+                await JS.InvokeVoidAsync("console.log", $"[FAE] Coût 2026-02 = {map.GetValueOrDefault((2026,2), 0m)}");
+                var sumJhFeb26 = project!.Profils.Sum(p => (p.DbRowId is int pid && _jhAllYears.TryGetValue((pid, 2026, 2), out var j)) ? j : 0m);
+                await JS.InvokeVoidAsync("console.log", $"[TEST] JH 2026-02 = {sumJhFeb26}");
+
+                var mapo = FaeBuildCoutEngageCumul();
+                await JS.InvokeVoidAsync("console.log", $"[TEST] Coût 2026-02 = {map.GetValueOrDefault((2026,2), 0m)}");
+
+
             }
+
         }
+
         catch (Exception ex)
         {
             error = "Erreur lors du chargement : " + ex.Message;
         }
         finally { loading = false; }
     }
+
+    // TSProjet.razor (section @code)
+private int currentYear;           // année visible dans le tableau
+private bool planningDirty = false; // si des cases ont été modifiées
+private async Task LoadPlanningYearAsync(int year)
+{
+    if (project is null) return;
+
+    var monthDict = await ProfileMonthlySvc.LoadAsync(project.Id, year);
+
+    foreach (var r in project.Profils)
+    {
+        r.PlanningYear = year;
+        r.Months ??= new decimal?[12];
+
+        if (r.DbRowId is int id)
+        {
+            for (int m = 1; m <= 12; m++)
+            {
+                r.Months[m - 1] = monthDict.TryGetValue((id, m), out var val) ? val : null;
+            }
+        }
+        else
+        {
+            for (int m = 0; m < 12; m++)
+                r.Months[m] = r.Months[m]; // laisse tel quel (ou null)
+        }
+    }
+}
+
+//fonction année pl
+private async Task ChangeYearAsync(int delta)
+{
+    if (project is null) return;
+
+    // 1) Sauvegarde auto si l'utilisateur a modifié quelque chose
+    if (planningDirty)
+        await SavePlanningAsync(currentYear); // <— on fige l’année courante
+
+    // 2) Calcule l’année cible et charge ses valeurs
+    var targetYear = currentYear + delta;
+    await LoadPlanningYearAsync(targetYear);
+
+    // 3) Bascule l’état
+    currentYear = targetYear;
+    planningDirty = false;
+
+    StateHasChanged();
+}
+
+// Helpers pour le binding des boutons UI
+private Task GoPrevYearAsync() => ChangeYearAsync(-1);
+private Task GoNextYearAsync() => ChangeYearAsync(1);
+
 
 
     private async Task SaveOverview()
@@ -259,49 +596,49 @@
 
     private readonly List<PhasePlan> phasePlans = new();
 
-    private async Task SavePlanningAsync()
+    private bool isSaving;
+private bool isSwitchingYear;
+
+private async Task SavePlanningAsync(int? year = null)
+{
+    if (project is null || project.Profils is null) return;
+
+    isSaving = true;
+    planningSaveInfo = null;
+
+    try
     {
-        planningSaveInfo = null;
+        // 1) On sauve explicitement l'année demandée, sinon l'année affichée
+        var y = year ?? currentYear;
 
-        if (project is null || project.Profils is null)
-        {
-            planningSaveInfo = "[SavePlanning] project/profils null";
-            StateHasChanged();
-            return;
-        }
-
-        var year = project.Profils.FirstOrDefault()?.PlanningYear ?? DateTime.UtcNow.Year;
-
-        // Items à sauver : uniquement les lignes qui ont un Id BD
+        // 2) Items à sauver : uniquement les lignes avec un Id BD
         var items = project.Profils
             .Where(p => p.DbRowId is int)
             .Select(p => (ProfilRowId: p.DbRowId!.Value, Months: p.Months ?? new decimal?[12]))
             .ToList();
 
-        // DIAGNOSTIC : combien d’items / quels id ?
-        var ids = string.Join(",", items.Select(i => i.ProfilRowId));
-        Console.WriteLine($"[SavePlanning] year={year}, items={items.Count}, ids=[{ids}]");
-
         if (items.Count == 0)
         {
             planningSaveInfo = "[SavePlanning] 0 item à sauvegarder (DbRowId manquants ?)";
-            StateHasChanged();
             return;
         }
 
-        try
-        {
-            await ProfileMonthlySvc.SaveAsync(project.Id, year, items);
-            planningSaveInfo = "[SavePlanning] OK";
-        }
-        catch (Exception ex)
-        {
-            planningSaveInfo = "[SavePlanning] EXCEPTION: " + ex.Message;
-            Console.WriteLine(ex);
-        }
-
+        await ProfileMonthlySvc.SaveAsync(project.Id, y, items);
+        planningSaveInfo = $"[SavePlanning] OK ({y})";
+        planningDirty = false;              // ✅ on n’a plus de modifs en attente
+    }
+    catch (Exception ex)
+    {
+        planningSaveInfo = "[SavePlanning] EXCEPTION: " + ex.Message;
+        Console.WriteLine(ex);
+    }
+    finally
+    {
+        isSaving = false;
         StateHasChanged();
     }
+}
+
 
     private string? planningSaveInfo;
 
@@ -313,6 +650,100 @@
         await ProjectTjmSvc.EnsureInitializedAsync(project.Id);
         projectTjms = await ProjectTjmSvc.LoadAsync(project.Id);
     }
+    private List<AchatItem> achatItem = new();
+
+    private async Task LoadAchatsAsync()
+    {
+        if (project is null) return;
+        achatItem = await AchatSvc.LoadAsync(project.Id);
+    }
+
+    private async Task SaveAchatsAsync()
+    {
+        if (project is null) return;
+        await AchatSvc.SaveAsync(project.Id, achatItem);
+        achatItem = await AchatSvc.LoadAsync(project.Id); // recharge propre
+    }
+
+    private void AddAchatRow()
+    {
+        if (project is null) return;
+        achatItem.Add(new AchatItem
+        {
+            ProjectId = project.Id,
+            Designation = "",
+            PurchaseType = PurchaseType.Logiciel, // valeur par défaut
+            Quantity = 1
+        });
+    }
+    private static string LabelPurchaseType(PurchaseType type) => type switch
+    {
+        PurchaseType.CSPMicrosoft => "CSP Microsoft",
+        PurchaseType.ZenAssist => "Zen@ssist",
+        PurchaseType.Logiciel => "Logiciel",
+        PurchaseType.ManageEngine => "ManageEngine",
+        PurchaseType.Materiel => "Matériel",
+        PurchaseType.Skillisy => "Skillisy",
+        PurchaseType.Rescue => "Rescue",
+        PurchaseType.Run2C => "Run2C",
+        PurchaseType.SupportMCO => "Support - MCO",
+        _ => type.ToString()
+    };
+
+
+    private async Task DeleteAchatRow(AchatItem row)
+    {
+        if (row.Id > 0)
+            await AchatSvc.DeleteAsync(row.Id);
+        achatItem.Remove(row);
+    }
+    private async Task ActivateFinance()
+    {
+        activeTab = "finance";
+
+        // Charger les achats uniquement si on ne les a pas encore
+        if (achatItem.Count == 0 && project is not null)
+            await LoadAchatsAsync();
+    }
+    private List<FraisItem> frais = new();
+
+    private async Task LoadFraisAsync()
+    {
+        if (project is null) return;
+        frais = await FraisSvc.LoadAsync(project.Id);
+    }
+
+    private void AddFraisRow()
+    {
+        if (project is null) return;
+        frais.Add(new FraisItem
+        {
+            ProjectId = project.Id,
+            Libelle = "",
+            CoutUnitaire = null,
+            Quantite = 1,
+            MontantRefacture = null,
+            Commentaire = null
+        });
+    }
+
+    private async Task SaveFraisAsync()
+    {
+        if (project is null) return;
+        await FraisSvc.SaveAsync(project.Id, frais);
+    }
+
+    private async Task DeleteFraisAsync(FraisItem row)
+    {
+        if (row.Id == 0) frais.Remove(row);
+        else
+        {
+            await FraisSvc.DeleteAsync(row.Id);
+            frais.Remove(row);
+        }
+    }
+
+
 
     private async Task SaveTjmAsync()
     {
@@ -396,6 +827,51 @@
         </tbody>
     </table>
 </div>;
+private List<AchatPrestataireItem> prestas = new();
+
+private async Task LoadPrestasAsync()
+{
+    if (project is null) return;
+    prestas = await PrestasSvc.LoadAsync(project.Id);
+}
+
+private void AddPrestaRow()
+{
+    if (project is null) return;
+    prestas.Add(new AchatPrestataireItem
+    {
+        ProjectId = project.Id,
+        Societe = "",
+        CoutJour = null,
+        NbJours = 1,
+        Tjm = null,
+        Commentaire = null
+    });
+}
+
+private async Task SavePrestasAsync()
+{
+    if (project is null) return;
+    await PrestasSvc.SaveAsync(project.Id, prestas);
+    // Optionnel : recharger pour resynchroniser avec la BDD
+    // prestas = await PrestasSvc.LoadAsync(project.Id);
+}
+
+private async Task DeletePrestaAsync(AchatPrestataireItem row)
+{
+    if (row.Id == 0)
+    {
+        prestas.Remove(row);
+    }
+    else
+    {
+        await PrestasSvc.DeleteAsync(row.Id);
+        prestas.Remove(row);
+    }
+}
+
+
+
 
 
 }
@@ -461,10 +937,11 @@ else if (project is not null)
 
             <li class="nav-item">
                 <button class="nav-link @(activeTab == "finance" ? "active" : "")"
-                        @onclick='() => activeTab = "finance"'>
+                        @onclick="ActivateFinance">
                     Budget & Finances
                 </button>
             </li>
+
             <li class="nav-item">
                 <button class="nav-link @(activeTab == "planning" ? "active" : "")"
                         @onclick='() => activeTab = "planning"'>
@@ -905,13 +1382,13 @@ else if (project is not null)
             @RenderRefTableSimple("Agences : TJM / CJM (référence)", "Agences",
             new[] { "TJM Paris", "CJM Paris", "TJM Région", "CJM Région" })
 
-<!-- ====== CES Log ====== -->
-@RenderRefTableSimple("CES Log : TJM / CJM / PRCS (référence)", "CES Log",
-        new[] { "TJM CES", "CJM CES", "PRCS CES" })
+            <!-- ====== CES Log ====== -->
+            @RenderRefTableSimple("CES Log : TJM / CJM / PRCS (référence)", "CES Log",
+                    new[] { "TJM CES", "CJM CES", "PRCS CES" })
 
-<!-- ====== CES Infra ====== -->
-@RenderRefTableSimple("CES Infra : TJM / CJM (référence)", "CES Infra",
-        new[] { "TJM CES", "CJM CES" })
+            <!-- ====== CES Infra ====== -->
+            @RenderRefTableSimple("CES Infra : TJM / CJM (référence)", "CES Infra",
+                    new[] { "TJM CES", "CJM CES" })
 }
 
 
@@ -935,217 +1412,722 @@ else if (project is not null)
     else if (activeTab == "finance")
     {
         <div class="card shadow-sm">
-            <div class="card-header">Budget & Finances</div>
-            <div class="card-body text-muted">Frais, Achats, Échéancier, Résumé marge — à venir.</div>
-        </div>
-    }
-
-    @* --- Onglet 5 : Planning & Jalons --- *@
-    else if (activeTab == "planning")
-    {
-        <div class="card shadow-sm">
-            <div class="card-header">Planning & Jalons</div>
-            @if (!string.IsNullOrEmpty(planningSaveInfo))
-            {
-                <div class="alert alert-info py-1 my-2">@planningSaveInfo</div>
-            }
-
-            <div class="card-body">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <span>Planning & Jalons</span>
-                    <button class="btn btn-sm btn-primary" @onclick="SavePlanningAsync">Enregistrer</button>
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>Achats — Matériel / Logiciel</span>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="AddAchatRow">Ajouter une ligne</button>
+                    <button class="btn btn-sm btn-primary" @onclick="SaveAchatsAsync">Enregistrer</button>
                 </div>
+            </div>
 
-    @if (project?.Profils is null || project.Profils.Count == 0)
-    {
-        <div class="text-muted">Aucun profil — ajoutez des lignes dans l’onglet « Ressources & Charges ».</div>
-    }
-    else
-{
-     // <<-- IMPORTANT : on redéclare proprement les variables ici
-
-        var planYear = project.Profils.First().PlanningYear;
-
-        var culture = System.Globalization.CultureInfo.GetCultureInfo("fr-FR");
-        string LabelMois(int month) =>
-            culture.DateTimeFormat.GetAbbreviatedMonthName(month) + "." + (planYear % 100).ToString("00");
-
-        decimal[] totalParMois = new decimal[12];
-        decimal totalChargeTousProfils = 0m;
-        decimal totalSaisieMoisTousProfils = 0m;
-
-        foreach (var r in project.Profils)
-        {
-            for (int m = 0; m < 12; m++)
-                totalParMois[m] += r.Months?[m] ?? 0m;
-
-            totalChargeTousProfils += r.ChargeJh ?? 0m;
-            totalSaisieMoisTousProfils += (r.Months ?? Array.Empty<decimal?>()).Sum(v => v ?? 0m);
-        }
-
-        decimal totalEcartTousProfils = totalSaisieMoisTousProfils - totalChargeTousProfils;
-    
-
-    <div class="table-responsive">
-        <table class="table table-sm align-middle">
-            <thead class="table-primary">
-                <tr>
-                    <th style="min-width:220px">Profil</th>
-                    <th class="text-end" style="width:120px">Charge par profil</th>
-                    <th class="text-end" style="width:110px">Écart&nbsp;?</th>
-                    @for (int m = 0; m < 12; m++)
-                    {
-                        <th class="text-end">@LabelMois(m + 1)</th>   @* <-- variables visibles ici *@
-                    }
-                </tr>
-            </thead>
-                            <tbody>
-                                @foreach (var row in project!.Profils)
-                                {
-                                    var sommeMois = (row.Months ?? Array.Empty<decimal?>()).Sum(v => v ?? 0m);
-                                    var chargeProfil = row.ChargeJh ?? 0m;
-                                    var ecart = sommeMois - chargeProfil;
-
-                                    <tr>
-                                        <td>
-                                            <input class="form-control-plaintext form-control-sm"
-                                                   value="@row.Profil"
-                                                   readonly
-                                                   tabindex="-1" />
-                                        </td>
-
-
-                                        <td class="text-end">@chargeProfil.ToString("N2")</td>
-
-                                        <td class="text-end @(ecart == 0 ? "" : (ecart > 0 ? "text-success" : "text-danger"))">
-                                            @ecart.ToString("N2")
-                                        </td>
-
-                                        @for (int m = 0; m < 12; m++)
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Désignation</th>
+                            <th>Type</th>
+                            <th class="num">Coût unitaire (HT)</th>
+                            <th class="num">Qté</th>
+                            <th class="num">Montant achat (HT)</th>
+                            <th class="num">Coût unitaire revente (HT)</th>
+                            <th class="num">Montant revente (HT)</th>
+                            <th class="num">Markup %</th>
+                            <th>Commentaire</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (achatItem.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="10" class="text-center text-muted py-3">
+                                    Aucun achat — cliquez « Ajouter une ligne ».
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var row in achatItem)
+                            {
+                                <tr>
+                                    <td>
+                                        <input class="form-control form-control-sm"
+                                               value="@row.Designation"
+                                               @oninput="e => row.Designation = e.Value?.ToString() ?? string.Empty" />
+                                    </td>
+                                    <td>
+                                        <InputSelect @bind-Value="row.PurchaseType" class="form-control form-control-sm col_type ">
+                                        @foreach (var type in Enum.GetValues<PurchaseType>())
                                         {
-                                            var mm = m; 
-                                                        <td class="text-end">
-                                                            <InputNumber TValue="decimal?"
-                                                                         class="form-control form-control-sm text-end"
-                                                                         Value="row.Months[mm]"
-                                                                         ValueChanged="@(v => { row.Months[mm] = v; })"
-                                                                         ValueExpression="@( () => row.Months[mm] )" />
-                                                        </td>
+                                            <option value="@type">@LabelPurchaseType(type)</option>
                                         }
+                                        </InputSelect>
+                                    </td>
+                                    <td>
+                                        <InputNumber TValue="decimal?" class="form-control form-control-sm text-end"
+                                                     @bind-Value="row.UnitCostHt" />
+                                    </td>
+                                    <td>
+                                    <InputNumber TValue="decimal?" class="form-control form-control-sm text-end col_quanti"
+                                                     @bind-Value="row.Quantity" />
+                                    </td>
+                                    <td class="text-end">@((row.AmountPurchaseHt ?? (row.UnitCostHt ?? 0m) * (row.Quantity ?? 0m)).ToString("N2"))</td>
+                                    <td>
+                                        <InputNumber TValue="decimal?" class="form-control form-control-sm text-end"
+                                                     @bind-Value="row.UnitResaleHt" />
+                                    </td>
+                                    <td class="text-end">@((row.AmountResaleHt ?? (row.UnitResaleHt ?? 0m) * (row.Quantity ?? 0m)).ToString("N2"))</td>
+                                    <td class="text-end">
+                                        @((row.MarkupPercent ?? (
+                                                                ((row.UnitResaleHt ?? 0m) * (row.Quantity ?? 0m) > 0m
+                                                                ? (((row.UnitResaleHt ?? 0m) * (row.Quantity ?? 0m)) - ((row.UnitCostHt ?? 0m) * (row.Quantity ?? 0m)))
+                                                                / ((row.UnitResaleHt ?? 0m) * (row.Quantity ?? 0m))
+                                                                : 0m)
+                                                                )).ToString("P2"))
+                    </td>
 
+                    <td>
+                        <input class="form-control form-control-sm"
+                               value="@row.Comment"
+                               @oninput="e => row.Comment = e.Value?.ToString() ?? string.Empty" />
+                    </td>
+                    <td>
+                        <button class="btn btn-outline-danger btn-sm" @onclick="@(() => DeleteAchatRow(row))">❌</button>
+                    </td>
+                </tr>
+                                }
+                        }
+                    </tbody>
+                    @if (achatItem.Count > 0)
+                    {
+                        var totalAchat = achatItem.Sum(x => x.AmountPurchaseHt ?? (x.UnitCostHt ?? 0m) * (x.Quantity ?? 0m));
+                        var totalRevente = achatItem.Sum(x => x.AmountResaleHt ?? (x.UnitResaleHt ?? 0m) * (x.Quantity ?? 0m));
+
+                        <tfoot class="table-light fw-semibold">
+                            <tr>
+                                <td colspan="4" class="text-end">TOTAL</td>
+                                <td class="text-end">@totalAchat.ToString("N2")</td>
+                                <td></td>
+                                <td class="text-end">@totalRevente.ToString("N2")</td>
+                                <td class="text-end">@((totalAchat > 0 ? (totalRevente - totalAchat) / totalAchat : 0m).ToString("P2"))</td>
+                                <td colspan="2"></td>
+                            </tr>
+                        </tfoot>
+                    }
+                </table>
+            </div>
+        </div>
+        <div class="card shadow-sm mt-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>Achat Prestataires externes</span>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="AddPrestaRow">Ajouter une ligne</button>
+                    <button class="btn btn-sm btn-primary" @onclick="SavePrestasAsync">Enregistrer</button>
+                </div>
+            </div>
+
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        @{
+                            // Noms uniques pour éviter les collisions avec d'autres tableaux
+                            var prestaRows = prestas ?? new List<AchatPrestataireItem>();
+
+                            decimal sumCoutJour = prestaRows.Sum(r => r.CoutJour ?? 0m);
+                            decimal sumNbj = prestaRows.Sum(r => r.NbJours ?? 0m);
+                            decimal sumTjm = prestaRows.Sum(r => r.Tjm ?? 0m);
+
+                            decimal totalCoutP = prestaRows.Sum(r => r.TotalCout ?? 0m);
+                            decimal totalReventeP = prestaRows.Sum(r => r.MontantRevente ?? 0m);
+                            decimal? markupGlobalP = totalReventeP > 0 ? (totalReventeP - totalCoutP) / totalReventeP : (decimal?)null;
+                        }
+
+                        <thead class="table-light">
+                            <tr>
+                                <th class="col-wide">Prestation</th>
+                                <th class="col-wide">Société</th>
+                                <th class="col-narrow text-end">Coût jour (HT)</th>
+                                <th class="col-narrow text-end">Nbj</th>
+                                <th class="text-end">Total coût (HT)</th>
+                                <th class="col-narrow text-end">TJM (HT)</th>
+                                <th class="text-end">Montant revente (HT)</th>
+                                <th class="text-end">Markup (%)</th>
+                                <th class="col-wide">Commentaire</th>
+                                <th style="width:48px"></th>
+                            </tr>
+                        </thead>
+
+                        <tbody>
+                            @if (prestaRows.Count == 0)
+                            {
+                                <tr>
+                                    <td colspan="10" class="text-center text-muted py-3">Aucune ligne — cliquez « Ajouter une ligne ».</td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var r in prestaRows)
+                                {
+                                    <tr>
+                                        <!-- Prestation -->
+                                        <td class="col-wide">
+                                            <InputText class="form-control form-control-sm" @bind-Value="r.Prestation" />
+                                        </td>
+
+                                        <!-- Société -->
+                                        <td class="col-wide">
+                                            <InputText class="form-control form-control-sm" @bind-Value="r.Societe" />
+                                        </td>
+
+                                        <!-- Coût jour -->
+                                        <td class="col-narrow">
+                                            <InputNumber TValue="decimal?" class="form-control form-control-sm text-end" @bind-Value="r.CoutJour" />
+                                        </td>
+
+                                        <!-- Nbj -->
+                                        <td class="col-narrow">
+                                            <InputNumber TValue="decimal?" class="form-control form-control-sm text-end" @bind-Value="r.NbJours" />
+                                        </td>
+
+                                        <!-- Total coût (readonly = calculé) -->
+                                        <td class="text-end">
+                                            <input class="form-control form-control-sm text-end" value="@((r.TotalCout ?? 0m).ToString("N2"))" readonly />
+                                        </td>
+
+                                        <!-- TJM -->
+                                        <td class="col-narrow">
+                                            <InputNumber TValue="decimal?" class="form-control form-control-sm text-end" @bind-Value="r.Tjm" />
+                                        </td>
+
+                                        <!-- Montant revente (readonly = calculé) -->
+                                        <td class="text-end">
+                                            <input class="form-control form-control-sm text-end" value="@((r.MontantRevente ?? 0m).ToString("N2"))" readonly />
+                                        </td>
+
+                                        <!-- Markup % (readonly = calculé) -->
+                                        <td class="text-end">
+                                            <input class="form-control form-control-sm text-end"
+                                                   value="@(r.MarkupPercent.HasValue ? (r.MarkupPercent.Value * 100m).ToString("N2") + " %" : "")"
+                                                   readonly />
+                                        </td>
+
+                                        <!-- Commentaire -->
+                                        <td class="col-wide">
+                                            <InputText class="form-control form-control-sm" @bind-Value="r.Commentaire" />
+                                        </td>
+
+                                        <!-- Supprimer -->
+                                        <td class="text-end">
+                                            <button class="btn btn-outline-danger btn-sm" @onclick="() => DeletePrestaAsync(r)">❌</button>
+                                        </td>
                                     </tr>
                                 }
-                            </tbody>
+                            }
+                        </tbody>
 
-            <tfoot class="table-primary">
-                <tr class="fw-semibold">
-                    <td>TOTAL JH</td>
-                    <td class="text-end">@totalChargeTousProfils.ToString("N2")</td>
-                    <td class="text-end">@totalEcartTousProfils.ToString("N2")</td>
-                    @for (int m = 0; m < 12; m++)
-                    {
-                        <td class="text-end">@totalParMois[m].ToString("N2")</td>
-                    }
-                </tr>
-            </tfoot>
-        </table>
-    </div>
-    <div class="mt-4"></div>
-
-@* ===== Tableau : Ventilation mensuelle par PHASE ===== *@
-
-    // Année d’affichage (on prend celle de la 1ʳᵉ ligne ou l’année courante)
-    var phasesYear = phasePlans.FirstOrDefault()?.Year ?? DateTime.UtcNow.Year;
-
-    var culture2 = System.Globalization.CultureInfo.GetCultureInfo("fr-FR");
-    string LabelMois2(int month) =>
-        culture2.DateTimeFormat.GetAbbreviatedMonthName(month) + "." + (phasesYear % 100).ToString("00");
-
-    // Totaux (par mois / global)
-    var totalParMoisPhases = new decimal[12];
-    decimal totalChargePhases = 0m;
-    decimal totalSaisieMoisPhases = 0m;
-
-    foreach (var p in phasePlans)
-    {
-        for (int m = 0; m < 12; m++)
-            totalParMoisPhases[m] += p.Months?[m] ?? 0m;
-
-        totalChargePhases += p.ChargeJh ?? 0m;
-        totalSaisieMoisPhases += (p.Months ?? Array.Empty<decimal?>()).Sum(v => v ?? 0m);
-    }
-    var totalEcartPhases = totalSaisieMoisPhases - totalChargePhases;
-
-
-<div class="table-responsive">
-    <table class="table table-sm align-middle">
-        <thead class="table-primary">
-            <tr>
-                <th style="min-width:220px">Phases</th>
-                <th class="text-end" style="width:120px">Charge par phase</th>
-                <th class="text-end" style="width:110px">Écart&nbsp;?</th>
-                @for (int m = 0; m < 12; m++)
-                {
-                    <th class="text-end">@LabelMois2(m + 1)</th>
-                }
-            </tr>
-        </thead>
-
-        <tbody>
-            @foreach (var p in phasePlans)
-            {
-                var sommeMois = (p.Months ?? Array.Empty<decimal?>()).Sum(v => v ?? 0m);
-                var charge = p.ChargeJh ?? 0m;
-                var ecart = sommeMois - charge;
-
-                <tr>
-                    @* Utilise ta méthode existante Label(ProjectPhase) pour le libellé *@
-                    <td class="align-middle">@Label(p.Phase)</td>
-
-                    @* Charge par phase : SAISIE manuelle pour l’instant *@
-                    <td class="text-end" style="width:120px">
-                        <InputNumber TValue="decimal?"
-                                     class="form-control form-control-sm text-end"
-                                     @bind-Value="p.ChargeJh" />
-                    </td>
-
-                    <td class="text-end @(ecart == 0 ? "" : (ecart > 0 ? "text-success" : "text-danger"))">
-                        @ecart.ToString("N2")
-                    </td>
-
-                    @for (int m = 0; m < 12; m++)
-                    {
-                        var mm = m; // capture index
-                        <td class="text-end">
-                            <InputNumber TValue="decimal?"
-                                         class="form-control form-control-sm text-end"
-                                         @bind-Value="p.Months[mm]" />
-                        </td>
-                    }
-                </tr>
-            }
-        </tbody>
-
-        <tfoot class="table-primary">
-            <tr class="fw-semibold">
-                <td>TOTAL JH</td>
-                <td class="text-end">@totalChargePhases.ToString("N2")</td>
-                <td class="text-end @(totalEcartPhases == 0 ? "" : (totalEcartPhases > 0 ? "text-success" : "text-danger"))">
-                    @totalEcartPhases.ToString("N2")
-                </td>
-                @for (int m = 0; m < 12; m++)
-                {
-                    <td class="text-end">@totalParMoisPhases[m].ToString("N2")</td>
-                }
-            </tr>
-        </tfoot>
-    </table>
-</div>
-
-}
-
-</div>
-
+                        <tfoot class="table-light">
+                            <tr class="fw-semibold">
+                                <td>TOTAL</td>
+                                <td></td> <!-- Société -->
+                                <td class="text-end">@sumCoutJour.ToString("N2")</td>
+                                <td class="text-end">@sumNbj.ToString("N2")</td>
+                                <td class="text-end">@totalCoutP.ToString("N2")</td>
+                                <td class="text-end">@sumTjm.ToString("N2")</td>
+                                <td class="text-end">@totalReventeP.ToString("N2")</td>
+                                <td class="text-end">@((markupGlobalP.HasValue ? (markupGlobalP.Value * 100m).ToString("N2") + " %" : ""))</td>
+                                <td></td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
         </div>
+        <div class="card shadow-sm mt-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>Frais</span>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="AddFraisRow">Ajouter une ligne</button>
+                    <button class="btn btn-sm btn-primary" @onclick="SaveFraisAsync">Enregistrer</button>
+                </div>
+            </div>
+
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        @{
+                            var fraisRows = frais ?? new List<FraisItem>();
+                            decimal totalMontant = fraisRows.Sum(f => f.Montant ?? 0m);
+                            decimal totalRefacture = fraisRows.Sum(f => f.MontantRefacture ?? 0m);
+                        }
+
+                        <thead class="table-light">
+                            <tr>
+                                <th>Libellé frais</th>
+                                <th class="text-end">Coût unitaire (HT)</th>
+                                <th class="text-end">Quantité</th>
+                                <th class="text-end">Montant (HT)</th>
+                                <th class="text-end">Montant refacturé (HT)</th>
+                                <th>Commentaire</th>
+                                <th style="width:48px"></th>
+                            </tr>
+                        </thead>
+
+                        <tbody>
+                            @if (fraisRows.Count == 0)
+                            {
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted py-3">Aucun frais — cliquez « Ajouter une ligne ».</td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var r in fraisRows)
+                                {
+                                    <tr>
+                                        <td><InputText class="form-control form-control-sm" @bind-Value="r.Libelle" /></td>
+                                        <td><InputNumber TValue="decimal?" class="form-control form-control-sm text-end" @bind-Value="r.CoutUnitaire" /></td>
+                                        <td><InputNumber TValue="decimal?" class="form-control form-control-sm text-end" @bind-Value="r.Quantite" /></td>
+                                        <td class="text-end">@((r.Montant ?? 0m).ToString("N2"))</td>
+                                        <td><InputNumber TValue="decimal?" class="form-control form-control-sm text-end" @bind-Value="r.MontantRefacture" /></td>
+                                        <td><InputText class="form-control form-control-sm" @bind-Value="r.Commentaire" /></td>
+                                        <td class="text-end">
+                                            <button class="btn btn-outline-danger btn-sm" @onclick="() => DeleteFraisAsync(r)">❌</button>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+
+                        <tfoot class="table-light">
+                            <tr class="fw-semibold">
+                                <td>Total</td>
+                                <td></td>
+                                <td></td>
+                                <td class="text-end">@totalMontant.ToString("N2")</td>
+                                <td class="text-end">@totalRefacture.ToString("N2")</td>
+                                <td></td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+
+
+
     }
+@* --- Onglet 5 : Planning & Jalons --- *@
+else if (activeTab == "planning")
+{
+    <div class="card shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span>Planning & Jalons</span>
+            <button class="btn btn-sm btn-primary" @onclick="() => SavePlanningAsync(currentYear)">
+                Enregistrer
+            </button>
+        </div>
+
+        @if (!string.IsNullOrEmpty(planningSaveInfo))
+        {
+            <div class="alert alert-info py-1 my-2">@planningSaveInfo</div>
+        }
+
+        <div class="card-body">
+
+            @* ================== TABLEAU PLANNING (Profils) ================== *@
+            @if (project?.Profils is null || project.Profils.Count == 0)
+            {
+                <div class="text-muted">Aucun profil — ajoutez des lignes dans l’onglet « Ressources & Charges ».</div>
+            }
+            else
+            {
+                // Variables/calculs (inchangés)
+                var planYear = project.Profils.First().PlanningYear;
+
+                var culture = System.Globalization.CultureInfo.GetCultureInfo("fr-FR");
+                string LabelMois(int month) =>
+                    culture.DateTimeFormat.GetAbbreviatedMonthName(month) + "." + (planYear % 100).ToString("00");
+
+                decimal[] totalParMois = new decimal[12];
+                decimal totalChargeTousProfils = 0m;
+                decimal totalSaisieMoisTousProfils = 0m;
+
+                foreach (var r in project.Profils)
+                {
+                    for (int m = 0; m < 12; m++)
+                        totalParMois[m] += r.Months?[m] ?? 0m;
+
+                    totalChargeTousProfils += r.ChargeJh ?? 0m;
+                    totalSaisieMoisTousProfils += (r.Months ?? Array.Empty<decimal?>()).Sum(v => v ?? 0m);
+                }
+
+                decimal totalEcartTousProfils = totalSaisieMoisTousProfils - totalChargeTousProfils;
+
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                        <thead>
+                            @* Barre nav année en bleu clair, sans <div> dans <thead> *@
+                            <tr class="table-primary">
+                                @* 3 colonnes fixes + 12 mois = 15 colonnes totales
+                                   On découpe en 3 zones : gauche(5), centre(5), droite(5). *@
+                                <th colspan="5" class="p-2 text-start">
+                                    <button class="btn btn-sm btn-outline-secondary"
+                                            @onclick="() => ChangeYearAsync(-1)">
+                                        ← Année précédente
+                                    </button>
+                                </th>
+                                <th colspan="5" class="p-2 text-center fw-semibold">
+                                    Planning @currentYear
+                                </th>
+                                <th colspan="5" class="p-2 text-end">
+                                    <button class="btn btn-sm btn-outline-secondary"
+                                            @onclick="() => ChangeYearAsync(1)">
+                                        Année suivante →
+                                    </button>
+                                </th>
+                            </tr>
+
+                            @* Ligne de titres en bleu clair *@
+                            <tr class="table-primary">
+                                <th>Profil</th>
+                                <th>Charge par profil</th>
+                                <th>Écart</th>
+                                @for (int month = 1; month <= 12; month++)
+                                {
+                                    var label = new DateTime(currentYear, month, 1)
+                                        .ToString("MMM.yy", System.Globalization.CultureInfo.GetCultureInfo("fr-FR"));
+                                    <th class="text-end">@label</th>
+                                }
+                            </tr>
+                        </thead>
+
+                        <tbody>
+                            @foreach (var row in project!.Profils)
+                            {
+                                var sommeMois = (row.Months ?? Array.Empty<decimal?>()).Sum(v => v ?? 0m);
+                                var chargeProfil = row.ChargeJh ?? 0m;
+                                var ecart = sommeMois - chargeProfil;
+
+                                <tr>
+                                    <td>
+                                        <input class="form-control-plaintext form-control-sm"
+                                               value="@row.Profil"
+                                               readonly
+                                               tabindex="-1" />
+                                    </td>
+                                    <td class="text-end">@chargeProfil.ToString("N2")</td>
+                                    <td class="text-end @(ecart == 0 ? "" : (ecart > 0 ? "text-success" : "text-danger"))">
+                                        @ecart.ToString("N2")
+                                    </td>
+
+                                    @for (int m = 0; m < 12; m++)
+                                    {
+                                        var mm = m;
+                                        <td class="text-end">
+                                            <InputNumber TValue="decimal?"
+                                                         class="form-control form-control-sm text-end"
+                                                         Value="row.Months[mm]"
+                                                         ValueChanged="@(v => { row.Months[mm] = v; planningDirty = true; })"
+                                                         ValueExpression="@(() => row.Months[mm])" />
+                                        </td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+
+                        <tfoot class="table-primary">
+                            <tr class="fw-semibold">
+                                <td>TOTAL JH</td>
+                                <td class="text-end">@totalChargeTousProfils.ToString("N2")</td>
+                                <td class="text-end">@totalEcartTousProfils.ToString("N2")</td>
+                                @for (int m = 0; m < 12; m++)
+                                {
+                                    <td class="text-end">@totalParMois[m].ToString("N2")</td>
+                                }
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            }
+
+            @* ================== TABLEAU PHASES ================== *@
+            @{
+                // Année d’affichage (on prend celle de la 1ʳᵉ ligne ou l’année courante)
+                var phasesYear = phasePlans.FirstOrDefault()?.Year ?? DateTime.UtcNow.Year;
+
+                var culture2 = System.Globalization.CultureInfo.GetCultureInfo("fr-FR");
+                string LabelMois2(int month) =>
+                    culture2.DateTimeFormat.GetAbbreviatedMonthName(month) + "." + (phasesYear % 100).ToString("00");
+
+                // Totaux (par mois / global)
+                var totalParMoisPhases = new decimal[12];
+                decimal totalChargePhases = 0m;
+                decimal totalSaisieMoisPhases = 0m;
+
+                foreach (var p in phasePlans)
+                {
+                    for (int m = 0; m < 12; m++)
+                        totalParMoisPhases[m] += p.Months?[m] ?? 0m;
+
+                    totalChargePhases += p.ChargeJh ?? 0m;
+                    totalSaisieMoisPhases += (p.Months ?? Array.Empty<decimal?>()).Sum(v => v ?? 0m);
+                }
+                var totalEcartPhases = totalSaisieMoisPhases - totalChargePhases;
+            }
+
+            <div class="table-responsive mt-3">
+                <table class="table table-sm align-middle">
+                    <thead class="table-primary">
+                        <tr>
+                            <th style="min-width:220px">Phases</th>
+                            <th class="text-end" style="width:120px">Charge par phase</th>
+                            <th class="text-end" style="width:110px">Écart&nbsp;?</th>
+                            @for (int m = 0; m < 12; m++)
+                            {
+                                <th class="text-end">@LabelMois2(m + 1)</th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var p in phasePlans)
+                        {
+                            var sommeMois = (p.Months ?? Array.Empty<decimal?>()).Sum(v => v ?? 0m);
+                            var charge = p.ChargeJh ?? 0m;
+                            var ecart = sommeMois - charge;
+
+                            <tr>
+                                <td class="align-middle">@Label(p.Phase)</td>
+                                <td class="text-end" style="width:120px">
+                                    <InputNumber TValue="decimal?" class="form-control form-control-sm text-end"
+                                                 @bind-Value="p.ChargeJh" />
+                                </td>
+                                <td class="text-end @(ecart == 0 ? "" : (ecart > 0 ? "text-success" : "text-danger"))">
+                                    @ecart.ToString("N2")
+                                </td>
+                                @for (int m = 0; m < 12; m++)
+                                {
+                                    var mm = m;
+                                    <td class="text-end">
+                                        <InputNumber TValue="decimal?" class="form-control form-control-sm text-end"
+                                                     @bind-Value="p.Months[mm]" />
+                                    </td>
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot class="table-primary">
+                        <tr class="fw-semibold">
+                            <td>TOTAL JH</td>
+                            <td class="text-end">@totalChargePhases.ToString("N2")</td>
+                            <td class="text-end @(totalEcartPhases == 0 ? "" : (totalEcartPhases > 0 ? "text-success" : "text-danger"))">
+                                @totalEcartPhases.ToString("N2")
+                            </td>
+                            @for (int m = 0; m < 12; m++)
+                            {
+                                <td class="text-end">@totalParMoisPhases[m].ToString("N2")</td>
+                            }
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+
+            @* ================== ÉCHÉANCIER ================== *@
+            <div class="card shadow-sm mt-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>Échéancier</span>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-outline-secondary" @onclick="EchAddRow">Ajouter un jalon</button>
+                        <button class="btn btn-sm btn-primary" @onclick="EchSaveAsync">Enregistrer</button>
+                    </div>
+                </div>
+
+                <div class="card-body p-0">
+                    @{
+                        // Calculs de haut de tableau
+                        var contrat = project?.ContractAmount ?? 0m;
+
+                        // lignes triées
+                        var rows = (echeanciers ?? new())
+                            .OrderBy(x => x.BillingYear)
+                            .ThenBy(x => x.BillingMonth)
+                            .ThenBy(x => x.Id)
+                            .ToList();
+
+                        // total % et total montant (normalisation 40 -> 0,40)
+                        decimal totalPercent = 0m;
+                        decimal totalMontant = 0m;
+                        foreach (var rr in rows)
+                        {
+                            var p = rr.Percent > 1m ? rr.Percent / 100m : rr.Percent;
+                            totalPercent += p;
+                            totalMontant += p * contrat;
+                        }
+                    }
+
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width:70px">N°</th>
+                                    <th>Nom échéance</th>
+                                    <th class="text-end" style="width:120px">%</th>
+                                    <th style="min-width:160px">Mois facturation</th>
+                                    <th class="text-end" style="width:180px">Montant à facturation</th>
+                                    <th style="width:48px"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (rows.Count == 0)
+                                {
+                                    <tr>
+                                        <td colspan="6" class="text-center text-muted py-3">
+                                            Aucun jalon — cliquez « Ajouter un jalon ».
+                                        </td>
+                                    </tr>
+                                }
+                                else
+                                {
+                                    var index = 0;
+                                    foreach (var row in rows)
+                                    {
+                                        index++;
+
+                                        // normalisation : 40 -> 0,40
+                                        var percentNorm = row.Percent > 1m ? row.Percent / 100m : row.Percent;
+                                        var montantRow = percentNorm * contrat;
+
+                                        <tr>
+                                            <td class="text-end">@index</td>
+                                            <td>
+                                                <InputText class="form-control form-control-sm" @bind-Value="row.Label" />
+                                            </td>
+                                            <td>
+                                                <InputNumber TValue="decimal" class="form-control form-control-sm text-end"
+                                                             Value="@(row.Percent * 100m)"
+                                                             ValueChanged="@( (decimal v) => row.Percent = v/100m )"
+                                                             ValueExpression="@(()=>row.Percent)" />
+                                            </td>
+                                            <td>
+                                                <select class="form-select form-select-sm"
+                                                        value="@EchGetMonthKey(row)"
+                                                        @onchange="e => EchSetMonthKey(row, e.Value?.ToString() ?? string.Empty)">
+                                                    @foreach (var m in EcheancierMonthOptions)
+                                                    {
+                                                        <option value="@m.Key">@m.Label</option>
+                                                    }
+                                                </select>
+                                            </td>
+                                            <td class="text-end">@montantRow.ToString("N2")</td>
+                                            <td class="text-end">
+                                                <button class="btn btn-outline-danger btn-sm" @onclick="() => EchDeleteAsync(row)">❌</button>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                            <tfoot class="table-light">
+                                <tr class="fw-semibold">
+                                    <td></td>
+                                    <td class="text-end">TOTAL</td>
+                                    <td class="text-end">@((totalPercent * 100m).ToString("N2")) %</td>
+                                    <td></td>
+                                    <td class="text-end">@totalMontant.ToString("N2")</td>
+                                    <td></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            @* ================== Vision FAE ================== *@
+            <div class="card shadow-sm mt-3">
+                <div class="card-header">Vision FAE</div>
+                <div class="card-body p-0">
+                    @{
+                        var fr = System.Globalization.CultureInfo.GetCultureInfo("fr-FR");
+                        var contract = project?.ContractAmount ?? 0m;
+
+                        // Dictionnaire (year,month) -> coût engagé cumulé (dérivé du Planning)
+                        var coutCum = FaeBuildCoutEngageCumul();
+
+                        // Jalons triés
+                        var jalons = (echeanciers ?? new())
+                            .OrderBy(j => j.BillingYear)
+                            .ThenBy(j => j.BillingMonth)
+                            .ThenBy(j => j.Id)
+                            .ToList();
+
+                        decimal factureCum = 0m;
+                        decimal lastCout = 0m, lastFact = 0m, lastFae = 0m;
+                    }
+
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="text-end" style="width:220px">Coût engagé cumulé</th>
+                                    <th class="text-end" style="width:220px">Montant facturé cumulé</th>
+                                    <th class="text-end" style="width:220px">Montant FAE (€)</th>
+                                    <th class="text-end" style="width:160px">Montant FAE (%)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (jalons.Count == 0)
+                                {
+                                    <tr><td colspan="4" class="text-center text-muted py-3">Aucun jalon.</td></tr>
+                                }
+                                else
+                                {
+                                    foreach (var j in jalons)
+                                    {
+                                        // % stocké en fraction (0,40). Si certains anciens sont en "40", on protège :
+                                        var p = j.Percent > 1m ? j.Percent / 100m : j.Percent;
+
+                                        // Cumul facturé avance au jalon
+                                        factureCum += p * contract;
+
+                                        // Coût engagé cumulé à la fin du mois du jalon (ou dernier mois <=)
+                                        var ceCumul = GetCoutCumuleA(coutCum, j.BillingYear, j.BillingMonth);
+
+                                        // FAE
+                                        var fae = ceCumul - factureCum;
+                                        var faePct = contract > 0 ? (fae / contract) : (decimal?)null;
+
+                                        lastCout = ceCumul; lastFact = factureCum; lastFae = fae;
+
+                                        <tr>
+                                            <td class="text-end">@ceCumul.ToString("N2")</td>
+                                            <td class="text-end">@factureCum.ToString("N2")</td>
+                                            <td class="text-end">@fae.ToString("N2")</td>
+                                            <td class="text-end">@((faePct is null) ? "" : (faePct.Value * 100m).ToString("N2") + " %")</td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                            <tfoot class="table-light">
+                                <tr class="fw-semibold">
+                                    <td class="text-end">@lastCout.ToString("N2")</td>
+                                    <td class="text-end">@lastFact.ToString("N2")</td>
+                                    <td class="text-end">@lastFae.ToString("N2")</td>
+                                    <td></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </div> @* /.card-body *@
+    </div>     @* /.card shadow-sm *@
+}              @* /else if (activeTab == "planning") *@
+
+
+
+
+
+    
 }

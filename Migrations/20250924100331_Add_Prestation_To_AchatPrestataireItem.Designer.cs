@@ -4,6 +4,7 @@ using ExakisNeliteTSP.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ExakisNeliteTSP.Migrations
 {
     [DbContext(typeof(TspDbContext))]
-    partial class TspDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250924100331_Add_Prestation_To_AchatPrestataireItem")]
+    partial class Add_Prestation_To_AchatPrestataireItem
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -214,80 +217,6 @@ namespace ExakisNeliteTSP.Migrations
                     b.HasIndex("ProjectId", "Societe");
 
                     b.ToTable("AchatPrestataireItem");
-                });
-
-            modelBuilder.Entity("ExakisNeliteTSP.Models.EcheancierItem", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("BillingMonth")
-                        .HasColumnType("int");
-
-                    b.Property<int>("BillingYear")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Comment")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Label")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)");
-
-                    b.Property<decimal>("Percent")
-                        .HasPrecision(9, 4)
-                        .HasColumnType("decimal(9,4)");
-
-                    b.Property<Guid>("ProjectId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ProjectId", "BillingYear", "BillingMonth");
-
-                    b.ToTable("EcheancierItem", (string)null);
-                });
-
-            modelBuilder.Entity("ExakisNeliteTSP.Models.FraisItem", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Commentaire")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<decimal?>("CoutUnitaire")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<string>("Libelle")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)");
-
-                    b.Property<decimal?>("MontantRefacture")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<Guid>("ProjectId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<decimal?>("Quantite")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ProjectId");
-
-                    b.ToTable("FraisItem", (string)null);
                 });
 
             modelBuilder.Entity("ExakisNeliteTSP.Models.Project", b =>

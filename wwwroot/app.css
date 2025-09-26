@@ -49,3 +49,18 @@ h1:focus {
 .darker-border-checkbox.form-check-input {
     border-color: #929292;
 }
+/* Colonnes du tableau Achats */
+
+
+
+.col_quanti {
+    max-width: 70px; /* plus étroite */
+    width: 70px;
+    text-align: right;
+}
+.col_type {
+    max-width: 200px;
+    width: 200px;
+    text-align: right;
+}
+

@@ -1,5 +1,6 @@
 ﻿using ExakisNeliteTSP.Models;
 using Microsoft.EntityFrameworkCore;
+using System.Reflection.Emit;
 
 namespace ExakisNeliteTSP.Data
 {
@@ -14,6 +15,14 @@ namespace ExakisNeliteTSP.Data
         public DbSet<ProjectProfileMonthly> ProjectProfileMonthlies => Set<ProjectProfileMonthly>();
         public DbSet<ReferentielTjmItem> ReferentielTjmItems => Set<ReferentielTjmItem>();
         public DbSet<ProjectTjmItem> ProjectTjmItems => Set<ProjectTjmItem>();
+        public DbSet<AchatItem> AchatItem => Set<AchatItem>();
+        public DbSet<AchatPrestataireItem> AchatPrestataireItem => Set<AchatPrestataireItem>();
+
+        public DbSet<FraisItem> FraisItem => Set<FraisItem>();
+        public DbSet<EcheancierItem> EcheancierItem => Set<EcheancierItem>();
+
+
+
 
 
 
@@ -94,6 +103,8 @@ namespace ExakisNeliteTSP.Data
                  .OnDelete(DeleteBehavior.Cascade);
 
             });
+
+
             // --- Seed des valeurs par défaut (tableaux jaunes) ---
             // --- RESET complet : référentiels TJM/CJM/PRCS identiques à l'Excel ---
             b.Entity<ReferentielTjmItem>().HasData(
@@ -222,6 +233,93 @@ namespace ExakisNeliteTSP.Data
                 new() { Id = 3030, Category = "CES Infra", Profile = "TAM", Location = "TJM CES", Tjm = 360m },
                 new() { Id = 3031, Category = "CES Infra", Profile = "TAM", Location = "CJM CES", Tjm = 360m }
             );
+            // === AchatItem ===
+            b.Entity<AchatItem>(e =>
+            {
+                e.HasKey(x => x.Id);
+
+                e.Property(x => x.Designation)
+                    .HasMaxLength(128)
+                    .IsRequired();
+
+                e.Property(x => x.PurchaseType)
+                    .HasConversion<string>()
+                    .HasMaxLength(64);
+
+                e.Property(x => x.UnitCostHt).HasPrecision(18, 2);
+                e.Property(x => x.Quantity).HasPrecision(18, 2);
+                e.Property(x => x.UnitResaleHt).HasPrecision(18, 2);
+                e.Property(x => x.Comment).HasMaxLength(512);
+
+                // ⛔️ NE PAS mapper :
+                // e.Property(x => x.AmountPurchaseHt)...
+                // e.Property(x => x.AmountResaleHt)...
+                // e.Property(x => x.MarkupPercent)...
+            });
+
+
+
+            // === AchatPrestataireItem ===
+            b.Entity<AchatPrestataireItem>(e =>
+            {
+                e.HasKey(x => x.Id);
+
+                e.Property(x => x.Societe).HasMaxLength(128).IsRequired();
+                e.Property(x => x.Prestation).HasMaxLength(128);
+                e.Property(x => x.CoutJour).HasPrecision(18, 2);
+                e.Property(x => x.NbJours).HasPrecision(18, 2);
+                e.Property(x => x.Tjm).HasPrecision(18, 2);
+                e.Property(x => x.Commentaire).HasMaxLength(512);
+
+            });
+            b.Entity<FraisItem>(e =>
+            {
+                e.ToTable("FraisItem");
+                e.HasKey(x => x.Id);
+
+                // Index sur ProjectId pour faciliter les requêtes
+                e.HasIndex(x => x.ProjectId);
+
+                // Col.1 : Libellé frais
+                e.Property(x => x.Libelle)
+                    .HasMaxLength(128)
+                    .IsRequired();
+
+                // Col.2 : Coût unitaire
+                e.Property(x => x.CoutUnitaire).HasPrecision(18, 2);
+
+                // Col.3 : Quantité
+                e.Property(x => x.Quantite).HasPrecision(18, 2);
+
+                // Col.5 : Montant refacturé
+                e.Property(x => x.MontantRefacture).HasPrecision(18, 2);
+
+                // Col.6 : Commentaire (nullable, texte libre)
+                e.Property(x => x.Commentaire);
+
+                // Col.4 : Montant est calculé côté C#, pas stocké en base
+                e.Ignore(x => x.Montant);
+            });
+            b.Entity<EcheancierItem>(e =>
+            {
+                e.ToTable("EcheancierItem");
+                e.HasKey(x => x.Id);
+
+                e.HasIndex(x => new { x.ProjectId, x.BillingYear, x.BillingMonth });
+
+                e.Property(x => x.Label)
+                    .HasMaxLength(128)
+                    .IsRequired();
+
+                e.Property(x => x.Percent).HasPrecision(9, 4);
+
+                // Non mappés (calculés côté app)
+                e.Ignore(x => x.AmountFacture);
+                e.Ignore(x => x.CumulFacture);
+                e.Ignore(x => x.CoutEngageCumul);
+                e.Ignore(x => x.FAE);
+            });
+
 
 
 

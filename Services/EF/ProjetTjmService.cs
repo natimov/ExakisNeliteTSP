@@ -3,7 +3,7 @@ using ExakisNeliteTSP.Models;
 using ExakisNeliteTSP.Services.Interface;
 using Microsoft.EntityFrameworkCore;
 
-namespace ExakisNeliteTSP.Services;
+namespace ExakisNeliteTSP.Services.EF;
 
 public class ProjectTjmService : IProjectTjmService
 {
