@@ -1,0 +1,8 @@
+﻿@using ExakisNeliteTSP.Models
+@code {
+    [Parameter] public Project Project { get; set; } = default!;
+    [Parameter] public int ProjectId { get; set; }
+    [Parameter] public int CurrentYear { get; set; }
+    [Parameter] public EventCallback<int> CurrentYearChanged { get; set; }
+}
+<div class="card shadow-sm"><div class="card-body">Planning — à brancher</div></div>

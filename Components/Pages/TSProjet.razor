@@ -12,7 +12,6 @@
 @inject IProjectAchatService AchatSvc
 @inject IProjectAchatPrestataireService PrestasSvc
 @inject IProjectFraisService FraisSvc
-@inject IProjectEcheancierService EcheancierSvc
 @inject ExakisNeliteTSP.Services.Interface.IProjectEcheancierService EcheancierSvc
 @using System.Globalization
 
@@ -24,13 +23,15 @@
 
 
 @code {
-
+    [Inject] private IJSRuntime JS { get; set; } = default!;
     // JH multi-années : (profilId, year, month 1..12) -> Jours-Homme
     private Dictionary<(int profilId, int year, int month), decimal> _jhAllYears = new();
 
     
     private readonly System.Globalization.CultureInfo fro =
         System.Globalization.CultureInfo.GetCultureInfo("fr-FR");
+
+
     // ====================== ÉCHÉANCIER – ÉTAT ======================
     private List<EcheancierItem> echeanciers = new();
 
@@ -246,6 +247,20 @@
     // overview | summary | resources | finance | planning
     private string activeTab = "overview";
     private bool isEditing; // mode édition pour l’onglet "Fiche Projet"
+    private void OnMonthChanged(ProfilEntry row, int monthIndex, decimal? newValue)
+    {
+        var v = newValue ?? 0m;
+
+        // 1) refléter dans la vue de l’année courante
+        row.Months![monthIndex] = v;
+
+        // 2) mettre à jour la vérité globale multi-années
+        if (row.DbRowId is int pid)
+            _jhAllYears[(pid, currentYear, monthIndex + 1)] = v;
+
+        planningDirty = true;
+    }
+
 
     protected override async Task OnParametersSetAsync()
     {
@@ -291,7 +306,9 @@
                 _jhAllYears.Clear();
 
                 // Horizon = du 1er janv. de l'année de planning au dernier jalon (min 12 mois)
-                int startFAEYear = project!.Profils!.First().PlanningYear > 0 ? project.Profils.First().PlanningYear : DateTime.UtcNow.Year;
+                int startFAEYear = project!.Profils!.FirstOrDefault()?.PlanningYear
+                   ?? DateTime.UtcNow.Year;
+
                 var startFAE = new DateTime(startFAEYear, 1, 1);
                 var lastMilestoneFAE = (echeanciers ?? new())
                     .Where(e => e.BillingYear > 0 && e.BillingMonth >= 1 && e.BillingMonth <= 12)
@@ -315,23 +332,18 @@
             // dt = mois courant de l’horizon
             var dt = new DateTime(year, m, 1);
 
-            decimal jh = 0m;
+                            decimal jh = 0m;
 
-            // 1) Essai clé 1-based (1..12)
-            if (monthDictYear.TryGetValue((pid, m), out var v1) && v1.HasValue)
-                jh = v1.Value;
-            // 2) Essai clé 0-based (0..11)
-            else if (monthDictYear.TryGetValue((pid, m - 1), out var v0) && v0.HasValue)
-                jh = v0.Value;
-            // 3) Fallback UI : r.Months (offset depuis le début d’horizon)
-            else if (r.Months is not null)
-            {
-                int offset = ((dt.Year - startFAE.Year) * 12) + (dt.Month - 1);
-                if (offset >= 0 && offset < r.Months.Length)
-                    jh = r.Months[offset] ?? 0m;
-            }
+                            // 1) clé 1..12 (index 1-based)
+                            if (monthDictYear.TryGetValue((pid, m), out var v1) && v1.HasValue)
+                                jh = v1.Value;
+                            // 2) clé 0..11 (index 0-based, utile si l’historique en BDD a varié)
+                            else if (monthDictYear.TryGetValue((pid, m - 1), out var v0) && v0.HasValue)
+                                jh = v0.Value;
 
-            _jhAllYears[(pid, year, m)] = jh; // on stocke ce qu’on a trouvé (même si 0)
+                            // 3) plus de fallback UI : si absent en BDD => 0
+                            _jhAllYears[(pid, year, m)] = jh;
+
         }
     }
 }
@@ -346,18 +358,14 @@
                 // 2) Recalculer les colonnes calculées pour l'affichage
                 ProfilComputeService.ComputeAll(project);
                 var map = FaeBuildCoutEngageCumul();
-                @code {
-    [Inject] private IJSRuntime JS { get; set; } = default!;
-    // ...
-}
+                
 
                 Console.WriteLine($"[FAE] Server: keys={map.Count}, cumul(2026,2)={map.GetValueOrDefault((2026, 2), 0m)}");
                 await JS.InvokeVoidAsync("console.log", $"[FAE] Coût 2026-02 = {map.GetValueOrDefault((2026,2), 0m)}");
                 var sumJhFeb26 = project!.Profils.Sum(p => (p.DbRowId is int pid && _jhAllYears.TryGetValue((pid, 2026, 2), out var j)) ? j : 0m);
                 await JS.InvokeVoidAsync("console.log", $"[TEST] JH 2026-02 = {sumJhFeb26}");
 
-                var mapo = FaeBuildCoutEngageCumul();
-                await JS.InvokeVoidAsync("console.log", $"[TEST] Coût 2026-02 = {map.GetValueOrDefault((2026,2), 0m)}");
+                
 
 
             }
@@ -374,56 +382,79 @@
     // TSProjet.razor (section @code)
 private int currentYear;           // année visible dans le tableau
 private bool planningDirty = false; // si des cases ont été modifiées
-private async Task LoadPlanningYearAsync(int year)
-{
-    if (project is null) return;
-
-    var monthDict = await ProfileMonthlySvc.LoadAsync(project.Id, year);
-
-    foreach (var r in project.Profils)
+    private async Task LoadPlanningYearAsync(int year)
     {
-        r.PlanningYear = year;
-        r.Months ??= new decimal?[12];
+        currentYear = year;
 
-        if (r.DbRowId is int id)
+        if (project?.Profils is null) return;
+
+        foreach (var r in project.Profils)
         {
+            r.Months ??= new decimal?[12];
+
+            var pid = r.DbRowId ?? 0;
             for (int m = 1; m <= 12; m++)
             {
-                r.Months[m - 1] = monthDict.TryGetValue((id, m), out var val) ? val : null;
+                if (pid > 0 && _jhAllYears.TryGetValue((pid, year, m), out var jh))
+                    r.Months[m - 1] = jh;
+                else
+                    r.Months[m - 1] = 0m; // Vue de l'année : on ne touche pas aux autres années
             }
         }
-        else
-        {
-            for (int m = 0; m < 12; m++)
-                r.Months[m] = r.Months[m]; // laisse tel quel (ou null)
-        }
+
+        StateHasChanged();
     }
-}
+
 
 //fonction année pl
-private async Task ChangeYearAsync(int delta)
-{
-    if (project is null) return;
 
-    // 1) Sauvegarde auto si l'utilisateur a modifié quelque chose
-    if (planningDirty)
-        await SavePlanningAsync(currentYear); // <— on fige l’année courante
-
-    // 2) Calcule l’année cible et charge ses valeurs
-    var targetYear = currentYear + delta;
-    await LoadPlanningYearAsync(targetYear);
-
-    // 3) Bascule l’état
-    currentYear = targetYear;
-    planningDirty = false;
-
-    StateHasChanged();
-}
 
 // Helpers pour le binding des boutons UI
 private Task GoPrevYearAsync() => ChangeYearAsync(-1);
-private Task GoNextYearAsync() => ChangeYearAsync(1);
+        private Task GoNextYearAsync() => ChangeYearAsync(1);
+    private async Task ChangeYearAsync(int delta)
+    {
+        if (project is null) return;
 
+        // Sauvegarde l’année en cours si des modifs
+        if (planningDirty)
+            await SavePlanningAsync(currentYear);
+
+        var targetYear = currentYear + delta;
+
+        // 🔧 Recharger les JH pour l’année cible
+        _jhAllYears ??= new();
+        if (project?.Profils is not null)
+        {
+            // On recharge depuis le service pour l’année demandée
+            var dict = await ProfileMonthlySvc.LoadAsync(project.Id, targetYear);
+
+            foreach (var r in project.Profils)
+            {
+                if (r.DbRowId is not int pid) continue;
+
+                for (int m = 1; m <= 12; m++)
+                {
+                    decimal jh = 0m;
+
+                    // On met ce qu’on a trouvé dans la BDD
+                    if (dict.TryGetValue((pid, m), out var v1) && v1.HasValue)
+                        jh = v1.Value;
+
+                    // Sinon 0
+                    _jhAllYears[(pid, targetYear, m)] = jh;
+                }
+            }
+        }
+
+        // Charge les autres infos de l’année (calculs, UI, etc.)
+        await LoadPlanningYearAsync(targetYear);
+
+        currentYear = targetYear;
+        planningDirty = false;
+
+        StateHasChanged();
+    }
 
 
     private async Task SaveOverview()
@@ -1807,9 +1838,22 @@ else if (activeTab == "planning")
                         <tbody>
                             @foreach (var row in project!.Profils)
                             {
-                                var sommeMois = (row.Months ?? Array.Empty<decimal?>()).Sum(v => v ?? 0m);
-                                var chargeProfil = row.ChargeJh ?? 0m;
-                                var ecart = sommeMois - chargeProfil;
+                                    var chargeProfil = row.ChargeJh ?? 0m;
+                                    var pid = row.DbRowId ?? 0;
+
+                                    decimal sommeMoisAnnee = 0m;
+                                    if (pid > 0)
+                                    {
+                                        for (int m = 1; m <= 12; m++)
+                                        {
+                                            if (_jhAllYears.TryGetValue((pid, currentYear, m), out var v))
+                                                sommeMoisAnnee += v;
+                                        }
+                                    }
+
+                                    var ecart = sommeMoisAnnee - chargeProfil;
+
+
 
                                 <tr>
                                     <td>
@@ -1827,11 +1871,12 @@ else if (activeTab == "planning")
                                     {
                                         var mm = m;
                                         <td class="text-end">
-                                            <InputNumber TValue="decimal?"
-                                                         class="form-control form-control-sm text-end"
-                                                         Value="row.Months[mm]"
-                                                         ValueChanged="@(v => { row.Months[mm] = v; planningDirty = true; })"
-                                                         ValueExpression="@(() => row.Months[mm])" />
+                                                <InputNumber TValue="decimal?"
+                                                             class="form-control form-control-sm text-end"
+                                                             Value="row.Months[mm]"
+                                                             ValueChanged="@(v => OnMonthChanged(row, mm, v))"
+                                                             ValueExpression="@(() => row.Months[mm])" />
+
                                         </td>
                                     }
                                 </tr>
@@ -1934,197 +1979,221 @@ else if (activeTab == "planning")
                 </table>
             </div>
 
-            @* ================== ÉCHÉANCIER ================== *@
-            <div class="card shadow-sm mt-3">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <span>Échéancier</span>
-                    <div class="d-flex gap-2">
-                        <button class="btn btn-sm btn-outline-secondary" @onclick="EchAddRow">Ajouter un jalon</button>
-                        <button class="btn btn-sm btn-primary" @onclick="EchSaveAsync">Enregistrer</button>
-                    </div>
-                </div>
+                @* ================== ÉCHÉANCIER + VISION FAE côte à côte ================== *@
+                <div class="row g-3 mt-3">
 
-                <div class="card-body p-0">
-                    @{
-                        // Calculs de haut de tableau
-                        var contrat = project?.ContractAmount ?? 0m;
+                    <!-- Col 1 : ÉCHÉANCIER -->
+                    <div class="col-12 col-xl-6">
+                        <div class="card shadow-sm h-100 equal-card equal-rows ">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <span>Échéancier</span>
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-sm btn-outline-secondary" @onclick="EchAddRow">Ajouter un jalon</button>
+                                    <button class="btn btn-sm btn-primary" @onclick="EchSaveAsync">Enregistrer</button>
+                                </div>
+                            </div>
 
-                        // lignes triées
-                        var rows = (echeanciers ?? new())
-                            .OrderBy(x => x.BillingYear)
-                            .ThenBy(x => x.BillingMonth)
-                            .ThenBy(x => x.Id)
-                            .ToList();
+                            <div class="card-body p-0">
+                                @{
+                                    // Calculs de haut de tableau
+                                    var contrat = project?.ContractAmount ?? 0m;
 
-                        // total % et total montant (normalisation 40 -> 0,40)
-                        decimal totalPercent = 0m;
-                        decimal totalMontant = 0m;
-                        foreach (var rr in rows)
-                        {
-                            var p = rr.Percent > 1m ? rr.Percent / 100m : rr.Percent;
-                            totalPercent += p;
-                            totalMontant += p * contrat;
-                        }
-                    }
+                                    // lignes triées
+                                    var rows = (echeanciers ?? new())
+                                    .OrderBy(x => x.BillingYear)
+                                    .ThenBy(x => x.BillingMonth)
+                                    .ThenBy(x => x.Id)
+                                    .ToList();
 
-                    <div class="table-responsive">
-                        <table class="table table-sm align-middle mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th style="width:70px">N°</th>
-                                    <th>Nom échéance</th>
-                                    <th class="text-end" style="width:120px">%</th>
-                                    <th style="min-width:160px">Mois facturation</th>
-                                    <th class="text-end" style="width:180px">Montant à facturation</th>
-                                    <th style="width:48px"></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @if (rows.Count == 0)
-                                {
-                                    <tr>
-                                        <td colspan="6" class="text-center text-muted py-3">
-                                            Aucun jalon — cliquez « Ajouter un jalon ».
-                                        </td>
-                                    </tr>
-                                }
-                                else
-                                {
-                                    var index = 0;
-                                    foreach (var row in rows)
+                                    // total % et total montant (normalisation 40 -> 0,40)
+                                    decimal totalPercent = 0m;
+                                    decimal totalMontant = 0m;
+                                    foreach (var rr in rows)
                                     {
-                                        index++;
-
-                                        // normalisation : 40 -> 0,40
-                                        var percentNorm = row.Percent > 1m ? row.Percent / 100m : row.Percent;
-                                        var montantRow = percentNorm * contrat;
-
-                                        <tr>
-                                            <td class="text-end">@index</td>
-                                            <td>
-                                                <InputText class="form-control form-control-sm" @bind-Value="row.Label" />
-                                            </td>
-                                            <td>
-                                                <InputNumber TValue="decimal" class="form-control form-control-sm text-end"
-                                                             Value="@(row.Percent * 100m)"
-                                                             ValueChanged="@( (decimal v) => row.Percent = v/100m )"
-                                                             ValueExpression="@(()=>row.Percent)" />
-                                            </td>
-                                            <td>
-                                                <select class="form-select form-select-sm"
-                                                        value="@EchGetMonthKey(row)"
-                                                        @onchange="e => EchSetMonthKey(row, e.Value?.ToString() ?? string.Empty)">
-                                                    @foreach (var m in EcheancierMonthOptions)
-                                                    {
-                                                        <option value="@m.Key">@m.Label</option>
-                                                    }
-                                                </select>
-                                            </td>
-                                            <td class="text-end">@montantRow.ToString("N2")</td>
-                                            <td class="text-end">
-                                                <button class="btn btn-outline-danger btn-sm" @onclick="() => EchDeleteAsync(row)">❌</button>
-                                            </td>
-                                        </tr>
+                                        var p = rr.Percent > 1m ? rr.Percent / 100m : rr.Percent;
+                                        totalPercent += p;
+                                        totalMontant += p * contrat;
                                     }
                                 }
-                            </tbody>
-                            <tfoot class="table-light">
-                                <tr class="fw-semibold">
-                                    <td></td>
-                                    <td class="text-end">TOTAL</td>
-                                    <td class="text-end">@((totalPercent * 100m).ToString("N2")) %</td>
-                                    <td></td>
-                                    <td class="text-end">@totalMontant.ToString("N2")</td>
-                                    <td></td>
-                                </tr>
-                            </tfoot>
-                        </table>
+
+                                <div class="table-responsive">
+                                    <table class="table table-sm align-middle mb-0 equal-table equal-rows ">
+                                        <thead class="table-light thead-eche">
+                                            <tr>
+                                                <th style="width:70px">N°</th>
+                                                <th>Nom échéance</th>
+                                                <th class="text-end" style="width:120px">%</th>
+                                                <th style="min-width:160px">Mois facturation</th>
+                                                <th class="text-end" style="width:180px">Montant à facturation</th>
+                                                <th style="width:48px"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @if (rows.Count == 0)
+                                            {
+                                                <tr>
+                                                    <td colspan="6" class="text-center text-muted py-3">
+                                                        Aucun jalon — cliquez « Ajouter un jalon ».
+                                                    </td>
+                                                </tr>
+                                            }
+                                            else
+                                            {
+                                                var index = 0;
+                                                foreach (var row in rows)
+                                                {
+                                                    index++;
+
+                                                    // normalisation : 40 -> 0,40
+                                                    var percentNorm = row.Percent > 1m ? row.Percent / 100m : row.Percent;
+                                                    var montantRow = percentNorm * contrat;
+
+                                                    <tr>
+                                                        <td class="text-end">@index</td>
+                                                        <td>
+                                                            <InputText class="form-control form-control-sm" @bind-Value="row.Label" />
+                                                        </td>
+                                                        <td>
+                                                            <InputNumber TValue="decimal" class="form-control form-control-sm text-end"
+                                                                         Value="@(row.Percent * 100m)"
+                                                                         ValueChanged="@( (decimal v) => row.Percent = v/100m )"
+                                                                         ValueExpression="@(()=>row.Percent)" />
+                                                        </td>
+                                                        <td>
+                                                            <select class="form-select form-select-sm"
+                                                                    value="@EchGetMonthKey(row)"
+                                                                    @onchange="e => EchSetMonthKey(row, e.Value?.ToString() ?? string.Empty)">
+                                                                @foreach (var m in EcheancierMonthOptions)
+                                                                {
+                                                                    <option value="@m.Key">@m.Label</option>
+                                                                }
+                                                            </select>
+                                                        </td>
+                                                        <td class="text-end">@montantRow.ToString("N2")</td>
+                                                        <td class="text-end">
+                                                            <button class="btn btn-outline-danger btn-sm" @onclick="() => EchDeleteAsync(row)">❌</button>
+                                                        </td>
+
+
+                                                    </tr>
+                                                }
+                                            }
+                                        </tbody>
+                                        <tfoot class="table-light">
+                                            <tr class="fw-semibold">
+                                                <td></td>
+                                                <td class="text-end">TOTAL</td>
+                                                <td class="text-end">@((totalPercent * 100m).ToString("N2")) %</td>
+                                                <td></td>
+                                                <td class="text-end">@totalMontant.ToString("N2")</td>
+                                                <td></td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                </div>
-            </div>
 
-            @* ================== Vision FAE ================== *@
-            <div class="card shadow-sm mt-3">
-                <div class="card-header">Vision FAE</div>
-                <div class="card-body p-0">
-                    @{
-                        var fr = System.Globalization.CultureInfo.GetCultureInfo("fr-FR");
-                        var contract = project?.ContractAmount ?? 0m;
+                    <!-- Col 2 : VISION FAE -->
+                    <div class="col-12 col-xl-6">
+                        <div class="card shadow-sm h-100 equal-card equal-rows">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <span>Vision FAE</span>
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-sm btn-outline-secondary invisible" type="button">.</button>
+                                    <button class="btn btn-sm btn-primary invisible" type="button">.</button>
+                                </div>
+                            </div>
+                            <div class="card-body p-0">
 
-                        // Dictionnaire (year,month) -> coût engagé cumulé (dérivé du Planning)
-                        var coutCum = FaeBuildCoutEngageCumul();
 
-                        // Jalons triés
-                        var jalons = (echeanciers ?? new())
-                            .OrderBy(j => j.BillingYear)
-                            .ThenBy(j => j.BillingMonth)
-                            .ThenBy(j => j.Id)
-                            .ToList();
+                        @{
+                                    var fr = System.Globalization.CultureInfo.GetCultureInfo("fr-FR");
+                                    var contract = project?.ContractAmount ?? 0m;
 
-                        decimal factureCum = 0m;
-                        decimal lastCout = 0m, lastFact = 0m, lastFae = 0m;
-                    }
+                                    // Dictionnaire (year,month) -> coût engagé cumulé (dérivé du Planning)
+                                    var coutCum = FaeBuildCoutEngageCumul();
 
-                    <div class="table-responsive">
-                        <table class="table table-sm align-middle mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th class="text-end" style="width:220px">Coût engagé cumulé</th>
-                                    <th class="text-end" style="width:220px">Montant facturé cumulé</th>
-                                    <th class="text-end" style="width:220px">Montant FAE (€)</th>
-                                    <th class="text-end" style="width:160px">Montant FAE (%)</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @if (jalons.Count == 0)
-                                {
-                                    <tr><td colspan="4" class="text-center text-muted py-3">Aucun jalon.</td></tr>
+                                    // Jalons triés
+                                    var jalons = (echeanciers ?? new())
+                                    .OrderBy(j => j.BillingYear)
+                                    .ThenBy(j => j.BillingMonth)
+                                    .ThenBy(j => j.Id)
+                                    .ToList();
+
+                                    decimal factureCum = 0m;
+                                    decimal lastCout = 0m, lastFact = 0m, lastFae = 0m;
                                 }
-                                else
-                                {
-                                    foreach (var j in jalons)
-                                    {
-                                        // % stocké en fraction (0,40). Si certains anciens sont en "40", on protège :
-                                        var p = j.Percent > 1m ? j.Percent / 100m : j.Percent;
 
-                                        // Cumul facturé avance au jalon
-                                        factureCum += p * contract;
+                                <div class="table-responsive">
+                                    <table class="table table-sm align-middle mb-0 equal-table fae-table">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th class="text-end">Coût engagé<br />cumulé</th>
+                                                <th class="text-end">Montant facturé<br />cumulé</th>
+                                                <th class="text-end">Montant FAE (€)</th>
+                                                <th class="text-end">Montant FAE (%)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @if (jalons.Count == 0)
+                                            {
+                                                <tr><td colspan="4" class="text-center text-muted py-3">Aucun jalon.</td></tr>
+                                            }
+                                            else
+                                            {
+                                                foreach (var j in jalons)
+                                                {
+                                                    
 
-                                        // Coût engagé cumulé à la fin du mois du jalon (ou dernier mois <=)
-                                        var ceCumul = GetCoutCumuleA(coutCum, j.BillingYear, j.BillingMonth);
+                           
+                                                    // % stocké en fraction (0,40). Protection si anciens en "40"
+                                                    var p = j.Percent > 1m ? j.Percent / 100m : j.Percent;
 
-                                        // FAE
-                                        var fae = ceCumul - factureCum;
-                                        var faePct = contract > 0 ? (fae / contract) : (decimal?)null;
+                                                    // Cumul facturé avance au jalon
+                                                    factureCum += p * contract;
 
-                                        lastCout = ceCumul; lastFact = factureCum; lastFae = fae;
+                                                    // Coût engagé cumulé à la fin du mois du jalon (ou dernier mois <=)
+                                                    var ceCumul = GetCoutCumuleA(coutCum, j.BillingYear, j.BillingMonth);
 
-                                        <tr>
-                                            <td class="text-end">@ceCumul.ToString("N2")</td>
-                                            <td class="text-end">@factureCum.ToString("N2")</td>
-                                            <td class="text-end">@fae.ToString("N2")</td>
-                                            <td class="text-end">@((faePct is null) ? "" : (faePct.Value * 100m).ToString("N2") + " %")</td>
-                                        </tr>
-                                    }
-                                }
-                            </tbody>
-                            <tfoot class="table-light">
-                                <tr class="fw-semibold">
-                                    <td class="text-end">@lastCout.ToString("N2")</td>
-                                    <td class="text-end">@lastFact.ToString("N2")</td>
-                                    <td class="text-end">@lastFae.ToString("N2")</td>
-                                    <td></td>
-                                </tr>
-                            </tfoot>
-                        </table>
+                                                    // FAE
+                                                    var fae = ceCumul - factureCum;
+                                                    var faePct = contract > 0 ? (fae / contract) : (decimal?)null;
+
+                                                    lastCout = ceCumul; lastFact = factureCum; lastFae = fae;
+
+                                                    <tr>
+                                                        <td class="text-end">@ceCumul.ToString("N2")</td>
+                                                        <td class="text-end">@factureCum.ToString("N2")</td>
+                                                        <td class="text-end">@fae.ToString("N2")</td>
+                                                        <td class="text-end">@((faePct is null) ? "" : (faePct.Value * 100m).ToString("N2") + " %")</td>
+                                                    </tr>
+                                                }
+                                            }
+                                        </tbody>
+                                        <tfoot class="table-light">
+                                            <tr class="fw-semibold">
+                                                <td class="text-end">@lastCout.ToString("N2")</td>
+                                                <td class="text-end">@lastFact.ToString("N2")</td>
+                                                <td class="text-end">@lastFae.ToString("N2")</td>
+                                                <td></td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
                     </div>
+
                 </div>
-            </div>
+
+
+            
 
         </div> @* /.card-body *@
     </div>     @* /.card shadow-sm *@
 }              @* /else if (activeTab == "planning") *@
-
 
 
 

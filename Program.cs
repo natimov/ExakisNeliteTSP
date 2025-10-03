@@ -15,7 +15,6 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
                 .AddInteractiveServerComponents();
 
-// 2) Tes services applicatifs
 builder.Services.AddScoped<IProjectService, EfProjectService>();
 
 builder.Services.AddSingleton<IConsultantDirectoryService, InMemoryConsultantDirectoryService>();
@@ -34,7 +33,7 @@ builder.Services.AddScoped<IProjectFraisService, ProjectFraisService>();
 builder.Services.AddScoped<IProjectEcheancierService, EFEcheancierService>();
 
 
-// .cs
+
 
 
 var app = builder.Build();
@@ -49,14 +48,13 @@ app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();
 
-// (si tu ajoutes auth plus tard : app.UseAuthentication(); app.UseAuthorization();)
-// >>> AJOUT OBLIGATOIRE .NET 8 (anti-forgery) <<<
+
 app.UseAntiforgery();
 
-// 3) Point d’entrée Blazor (pas de _Host.cshtml)
+
 app.MapRazorComponents<App>()
    .AddInteractiveServerRenderMode();
-// --- TEST TEMPORAIRE DE CONNEXION AZURE SQL ---
+
 var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
 try
 {
@@ -68,7 +66,7 @@ catch (Exception ex)
 {
     Console.WriteLine("? Connexion Azure SQL KO : " + ex.Message);
 }
-// --- FIN TEST ---
+
 
 
 

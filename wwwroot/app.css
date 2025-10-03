@@ -1,4 +1,4 @@
-html, body {
+﻿html, body {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
 }
 
@@ -54,7 +54,7 @@ h1:focus {
 
 
 .col_quanti {
-    max-width: 70px; /* plus �troite */
+    max-width: 70px; /* plus etroite */
     width: 70px;
     text-align: right;
 }
@@ -62,5 +62,102 @@ h1:focus {
     max-width: 200px;
     width: 200px;
     text-align: right;
+}
+/* === Cartes identiques (header/paddings) === */
+.equal-card .card-header {
+    min-height: 48px;
+    padding-top: .5rem;
+    padding-bottom: .5rem;
+}
+
+.equal-card .card-body {
+    padding: 0;
+}
+
+/* === Tables stables et alignees === */
+.equal-table {
+    table-layout: fixed;
+    width: 100%;
+}
+
+.equal-nowrap thead th,
+.equal-nowrap tbody td {
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+/* === Hauteur de LIGNE identique pour les deux tableaux === */
+.equal-rows .table-sm th,
+.equal-rows .table-sm td {
+    padding-top: .62rem; /* ~31px de hauteur totale avec .table-sm */
+    padding-bottom: .62rem;
+}
+
+/* === Colonne "action" compacte (évite de faire gonfler la ligne) === */
+.table-action {
+    padding-top: .25rem !important;
+    padding-bottom: .25rem !important;
+    white-space: nowrap;
+    width: 44px; /* largeur fixe de la colonne bouton */
+}
+
+.btn-cell {
+    width: 31px; /* ≈ hauteur d’un input .form-control-sm */
+    height: 31px;
+    padding: 0;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .95rem;
+}
+
+/* === Vision FAE : colonnes plus étroites + titres sur 2 lignes si besoin === */
+.fae-table thead th {
+    white-space: normal;
+    line-height: 1.15;
+    font-size: .95rem;
+}
+
+    .fae-table thead th:nth-child(1) {
+        width: 140px;
+    }
+    /* Cout engagu cumule */
+    .fae-table thead th:nth-child(2) {
+        width: 140px;
+    }
+    /* Montant facture cumule */
+    .fae-table thead th:nth-child(3) {
+        width: 140px;
+    }
+    /* Montant FAE (€) */
+    .fae-table thead th:nth-child(4) {
+        width: 110px;
+    }
+.equal-rows .fae-table th,
+.equal-rows .fae-table td {
+    padding-top: .70rem; /* ajuste ici */
+    padding-bottom: .70rem;
+}
+
+/* Hauteur de la ligne d'en-tete du tableau echeancier */
+.thead-eche th { 
+    padding-top: .250rem; /* augmente si tu veux encore plus haut */
+    padding-bottom: .75rem;
+}
+/* Forcer la hauteur de l'entete Echeancier malgre .equal-rows */
+.equal-rows thead.thead-eche th {
+    padding-top: .99rem !important;
+    padding-bottom: .97rem !important;
+}
+/* FAE uniquement : hauteur des lignes (body) */
+.equal-rows table.fae-table.table-sm tbody td {
+    padding-top: .83rem;
+    padding-bottom: .86rem;
+}
+/* FAE uniquement : hausse la hauteur des lignes du BODY */
+table.fae-table.table-sm tbody td {
+    padding-top: .7rem !important;
+    padding-bottom: .95rem !important;
 }
 
