@@ -58,3 +58,27 @@ public enum ProjectPhase
     Provision
 }
 
+public enum ProjectEtape
+{
+    None,
+    PilotageProjet,
+    AnalyseDeLExistant,
+    ConceptionGenerale,
+    ConceptionTechniqueDetaillee,
+    ConceptionFonctionnelleDetaillee,
+    EgornomieGraphisme,
+    CahierDeRecette,
+    DeveloppementTestsUnitaires,
+    TestsIntegrationsARecetteInterne,
+    LivraisonAInstallationAMiseEnOeuvre,
+    Pilote,
+    Generalisation,
+    Support,
+    RepriseDeContenu,
+    AssistanceRecette,
+    Formation,
+    Garantie,
+    ProvisionPourRisque,
+    HorsAbaques
+}
+

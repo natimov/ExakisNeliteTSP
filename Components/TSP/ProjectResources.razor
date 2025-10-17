@@ -1,6 +1,241 @@
-﻿@using ExakisNeliteTSP.Models
-@code {
-    [Parameter] public Project Project { get; set; } = default!;
-    [Parameter] public int ProjectId { get; set; }
+﻿@using System.Globalization
+@using ExakisNeliteTSP.Models
+@using System.Linq
+
+
+<div class="card shadow-sm">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div class="fw-semibold">Ressources & Charges — PROFIL</div>
+
+        <div class="d-flex align-items-center gap-2">
+            <div class="input-group input-group-sm" style="width:240px">
+                <span class="input-group-text">% Remise TJM</span>
+                <InputNumber TValue="decimal?"
+                             class="form-control"
+                             Value="RemiseTjmPercent"
+                             ValueChanged="@(v => OnRemiseChanged.InvokeAsync(v))"
+                             ValueExpression="(() => RemiseTjmPercent)" />
+                <span class="input-group-text">%</span>
+            </div>
+
+            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="OnAddRow">Ajouter une ligne</button>
+            <button type="button" class="btn btn-primary btn-sm" @onclick="OnSave">Enregistrer</button>
+        </div>
+    </div>
+
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                @{
+                    var rows = (Rows ?? Enumerable.Empty<ProfilEntry>()).ToList();
+
+                    decimal totalCharge = rows.Sum(r => r.ChargeJh ?? 0m);
+                    decimal totalCA = rows.Sum(r => r.CaEuro ?? 0m);
+                    decimal totalCoutExa = rows.Sum(r => r.CoutExakisNeliteEuro ?? 0m);
+                    decimal totalCoutAgence = rows.Sum(r => r.CoutAgenceEuro ?? 0m);
+
+                    decimal? margeGlobaleExa = totalCA > 0 ? (totalCA - totalCoutExa) / totalCA : null;
+                    decimal? margeGlobaleAgence = totalCA > 0 ? (totalCA - totalCoutAgence) / totalCA : null;
+                }
+
+                <thead class="table-light">
+                    <tr>
+                        <th class="col-profil">PROFIL</th>
+                        <th>Entité</th>
+                        <th class="num">TJM (€/j)</th>
+                        <th class="num">CJM (€/j)</th>
+                        <th class="num hide-md">PRCS (€/j)</th>
+                        <th class="num hide-md">Frais Déplacement (si Cession) €</th>
+                        <th class="num hide-md">TCI / PRCS (€/j)</th>
+                        <th class="num">Charge (jh)</th>
+                        <th class="num">CA (€)</th>
+                        <th class="num hide-md">COUT Exakis Nelite (€)</th>
+                        <th class="num hide-md">COUT AGENCE (€)</th>
+                        <th class="pct hide-md"> PROFIL %jh</th>
+                        <th class="pct hide-md"> PROFIL %€</th>
+                        <th class="pct hide-md">Marge /Profil Exakis Nelite</th>
+                        <th class="pct hide-md">Marge /Profil AGENCE</th>
+                        <th style="width:48px"></th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    @if (rows.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="16" class="text-center text-muted py-3">
+                                Aucune ligne — cliquez « Ajouter une ligne ».
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var row in rows)
+                        {
+                            <tr>
+                                <!-- PROFIL -->
+                                <td>
+                                    <input class="form-control form-control-sm"
+                                           value="@row.Profil"
+                                           @oninput="e => { row.Profil = e.Value?.ToString() ?? string.Empty; OnRecompute.InvokeAsync(); }"
+                                           placeholder="Saisir le profil…" />
+                                </td>
+
+                                <!-- Entité -->
+                                <td>
+                                    <InputSelect TValue="EntiteType"
+                                                 class="form-select form-select-sm"
+                                                 Value="row.Entite"
+                                                 ValueChanged="@(v => { row.Entite = v; OnRecompute.InvokeAsync(); })"
+                                                 ValueExpression="(() => row.Entite)">
+                                        @foreach (var e in Enum.GetValues<EntiteType>())
+                                        {
+                                            <option value="@e">@e</option>
+                                        }
+                                    </InputSelect>
+                                </td>
+
+                                <!-- TJM -->
+                                <td>
+                                    <InputNumber TValue="decimal?"
+                                                 class="form-control form-control-sm"
+                                                 Value="row.Tjm"
+                                                 ValueChanged="@(v => { row.Tjm = v; OnRecompute.InvokeAsync(); })"
+                                                 ValueExpression="(() => row.Tjm)" />
+                                </td>
+
+                                <!-- CJM -->
+                                <td>
+                                    <InputNumber TValue="decimal?"
+                                                 class="form-control form-control-sm"
+                                                 Value="row.Cjm"
+                                                 ValueChanged="@(v => { row.Cjm = v; OnRecompute.InvokeAsync(); })"
+                                                 ValueExpression="(() => row.Cjm)" />
+                                </td>
+
+                                <!-- PRCS (readonly) -->
+                                <td>
+                                    <input class="form-control form-control-sm" value="@(row.Prcs?.ToString("N2"))" readonly />
+                                </td>
+
+                                <!-- Frais Déplacement (si Cession) -->
+                                <td>
+                                    <InputNumber TValue="decimal?"
+                                                 class="form-control form-control-sm"
+                                                 Value="row.FraisDeplacementSiCession"
+                                                 ValueChanged="@(v => { row.FraisDeplacementSiCession = v; OnRecompute.InvokeAsync(); })"
+                                                 ValueExpression="(() => row.FraisDeplacementSiCession)" />
+                                </td>
+
+                                <!-- TCI/PRCS (readonly) -->
+                                <td>
+                                    <input class="form-control form-control-sm" value="@(row.TciOverPrcs?.ToString("N2"))" readonly />
+                                </td>
+
+                                <!-- Charge (jh) -->
+                                <td>
+                                    <InputNumber TValue="decimal?"
+                                                 class="form-control form-control-sm"
+                                                 Value="row.ChargeJh"
+                                                 ValueChanged="@(v => { row.ChargeJh = v; OnRecompute.InvokeAsync(); })"
+                                                 ValueExpression="(() => row.ChargeJh)" />
+                                </td>
+
+                                <!-- CA (€) (readonly) -->
+                                <td><input class="form-control form-control-sm" value="@(row.CaEuro?.ToString("N2"))" readonly /></td>
+
+                                <!-- COUT Exakis Nelite (€) (readonly) -->
+                                <td><input class="form-control form-control-sm" value="@(row.CoutExakisNeliteEuro?.ToString("N2"))" readonly /></td>
+
+                                <!-- COUT AGENCE (€) (readonly) -->
+                                <td><input class="form-control form-control-sm" value="@(row.CoutAgenceEuro?.ToString("N2"))" readonly /></td>
+
+                                <!-- %jh PROFIL (readonly) -->
+                                <td><input class="form-control form-control-sm" value="@(row.PercentJhProfil is null ? "" : (row.PercentJhProfil.Value * 100m).ToString("N2") + " %")" readonly /></td>
+
+                                <!-- %€ PROFIL (readonly) -->
+                                <td><input class="form-control form-control-sm" value="@(row.PercentEuroProfil is null ? "" : (row.PercentEuroProfil.Value * 100m).ToString("N2") + " %")" readonly /></td>
+
+                                <!-- Marges (readonly) -->
+                                <td><input class="form-control form-control-sm" value="@(row.MargeProfilExa is null ? "" : (row.MargeProfilExa.Value * 100m).ToString("N2") + " %")" readonly /></td>
+                                <td><input class="form-control form-control-sm" value="@(row.MargeProfilAgence is null ? "" : (row.MargeProfilAgence.Value * 100m).ToString("N2") + " %")" readonly /></td>
+
+                                <!-- Supprimer -->
+                                <td class="text-end">
+                                    <button type="button" class="btn btn-outline-danger btn-sm"
+                                            @onclick="@(() => OnRemoveRow.InvokeAsync(row))">
+                                        ❌
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+
+                <tfoot class="table-light">
+                    <tr>
+                        <th>TOTAL</th>
+                        <th></th>
+                        <th></th>
+                        <th></th>
+                        <th class="hide-md"></th>
+                        <th class="hide-md"></th>
+                        <th class="hide-md"></th>
+
+                        <th class="num">@Num(totalCharge)</th>
+                        <th class="num">@Money(totalCA)</th>
+                        <th class="num hide-md">@Money(totalCoutExa)</th>
+                        <th class="num hide-md">@Money(totalCoutAgence)</th>
+
+                        <th class="pct hide-md"></th>
+                        <th class="pct hide-md"></th>
+
+                        <th class="pct hide-md">@Pct(margeGlobaleExa)</th>
+                        <th class="pct hide-md">@Pct(margeGlobaleAgence)</th>
+
+                        <th></th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    <div class="card-footer d-flex gap-2">
+        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="OnAddRow">Ajouter une ligne</button>
+        <button type="button" class="btn btn-primary btn-sm" @onclick="OnSave">Enregistrer</button>
+    </div>
+</div>
+
+@if (ProjectTjms?.Any() == true)
+{
+    @RenderRefTableSimple("Agences : TJM / CJM (référence)", "Agences",
+    new[] { "TJM Paris", "CJM Paris", "TJM Région", "CJM Région" })
+
+@RenderRefTableSimple("CES Log : TJM / CJM / PRCS (référence)", "CES Log",
+                          new[] { "TJM CES", "CJM CES", "PRCS CES" })
+
+@RenderRefTableSimple("CES Infra : TJM / CJM (référence)", "CES Infra",
+                          new[] { "TJM CES", "CJM CES" })
 }
-<div class="card shadow-sm"><div class="card-body">Resources — à brancher</div></div>
+
+@code {
+    // ===== Données =====
+    [Parameter] public IEnumerable<ProfilEntry>? Rows { get; set; }
+    [Parameter] public decimal? RemiseTjmPercent { get; set; }
+    [Parameter] public IEnumerable<ProjectTjmItem>? ProjectTjms { get; set; }
+
+    // ===== Actions/Callbacks fournis par le parent =====
+    [Parameter] public EventCallback OnAddRow { get; set; }
+    [Parameter] public EventCallback OnSave { get; set; }
+    [Parameter] public EventCallback OnRecompute { get; set; }
+    [Parameter] public EventCallback<ProfilEntry> OnRemoveRow { get; set; }
+    [Parameter] public EventCallback<decimal?> OnRemiseChanged { get; set; }
+
+    // Helpers/formatters remontés par le parent (pour éviter la duplication)
+    [Parameter] public Func<decimal?, string> Money { get; set; } = default!;
+    [Parameter] public Func<decimal?, string> Num { get; set; } = default!;
+    [Parameter] public Func<decimal?, string> Pct { get; set; } = default!;
+
+    // Générateur de tableau de référence (tu l’appelles déjà dans le parent)
+    [Parameter] public Func<string, string, string[], RenderFragment> RenderRefTableSimple { get; set; } = default!;
+}

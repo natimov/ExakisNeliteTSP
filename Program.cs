@@ -30,6 +30,8 @@ builder.Services.AddScoped<IProjectTjmService, ProjectTjmService>();
 builder.Services.AddScoped<IProjectAchatService, ProjectAchatService>();
 builder.Services.AddScoped<IProjectAchatPrestataireService, ProjectAchatPrestataireService>();
 builder.Services.AddScoped<IProjectFraisService, ProjectFraisService>();
+builder.Services.AddScoped<IWorkloadService, EFWorkloadService>();
+
 builder.Services.AddScoped<IProjectEcheancierService, EFEcheancierService>();
 
 

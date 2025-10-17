@@ -13,8 +13,7 @@
 @inject IProjectAchatPrestataireService PrestasSvc
 @inject IProjectFraisService FraisSvc
 @inject ExakisNeliteTSP.Services.Interface.IProjectEcheancierService EcheancierSvc
-@using System.Globalization
-
+@inject IWorkloadService WorkloadService
 
 
 
@@ -261,6 +260,8 @@
         planningDirty = true;
     }
 
+    private List<WorkloadItem> wlRows = new();
+
 
     protected override async Task OnParametersSetAsync()
     {
@@ -274,15 +275,15 @@
             }
             else
             {
-                // 1) Charger les lignes Profil depuis la base
+                // 1) Profils depuis la base
                 project.Profils = await ProfilRowsSvc.LoadProfilEntriesAsync(project.Id);
-                // Initialiser les buffers Planning pour les lignes chargées de la BDD
                 foreach (var r in project.Profils)
                 {
                     r.Months ??= new decimal?[12];
                     if (r.PlanningYear == 0) r.PlanningYear = DateTime.UtcNow.Year;
                 }
-                // Init des lignes PHASES (UI only) la première fois
+
+                // 2) Phases (UI only) au premier passage
                 if (phasePlans.Count == 0)
                 {
                     foreach (var ph in Enum.GetValues<ProjectPhase>())
@@ -290,94 +291,107 @@
                         if (ph == ProjectPhase.None) continue;
                         phasePlans.Add(new PhasePlan { Phase = ph, Year = DateTime.UtcNow.Year });
                     }
-                }// Année de planning (on prend celle du 1er profil, sinon année en cours)
-                // Année visible par défaut (1re ligne ou année courante)
+                }
+
+                // 3) Année visible par défaut
                 currentYear = project.Profils.FirstOrDefault()?.PlanningYear ?? DateTime.UtcNow.Year;
 
-                // Charge les 12 mois pour currentYear
-                await LoadPlanningYearAsync(currentYear);
+                // 4) Charger référentiels + jalons (avant de calculer l’horizon FAE)
                 await LoadTjmAsync();
                 await LoadAchatsAsync();
                 await LoadPrestasAsync();
                 await LoadFraisAsync();
-                EnsureEcheancierMonthOptions();      // remplit la liste des mois
+                EnsureEcheancierMonthOptions();
                 await EchLoadAsync();
-                // === CHARGEMENT JH MULTI-ANNÉES POUR LA FAE (couvre 2025, 2026, etc.) ===
-                _jhAllYears.Clear();
+                wlRows = await WorkloadService.LoadAsync(project.Id);
+                if (wlRows.Count == 0)
+                {
+                    var created = await WorkloadService.CreateParentAsync(project.Id, 1);
+                    wlRows.Add(created);
+                    wlSelected = created;
+                }
 
-                // Horizon = du 1er janv. de l'année de planning au dernier jalon (min 12 mois)
-                int startFAEYear = project!.Profils!.FirstOrDefault()?.PlanningYear
-                   ?? DateTime.UtcNow.Year;
 
-                var startFAE = new DateTime(startFAEYear, 1, 1);
+
+                // === Définir un horizon ROBUSTE couvrant passé et futur ===
+                const int PAST_BUFFER_YEARS = 3;   // charge aussi 3 ans en arrière
+                const int FUTURE_BUFFER_YEARS = 3; // et 3 ans en avant
+
+                int planningYear = project!.Profils!.FirstOrDefault()?.PlanningYear ?? DateTime.UtcNow.Year;
+
+                // dernier jalon connu (si aucun, on restera sur planningYear)
+                var startFAE = new DateTime(planningYear, 1, 1);
                 var lastMilestoneFAE = (echeanciers ?? new())
-                    .Where(e => e.BillingYear > 0 && e.BillingMonth >= 1 && e.BillingMonth <= 12)
+                    .Where(e => e.BillingYear > 0 && e.BillingMonth is >= 1 and <= 12)
                     .Select(e => new DateTime(e.BillingYear, e.BillingMonth, 1))
                     .DefaultIfEmpty(startFAE)
                     .Max();
-                var endFAE = lastMilestoneFAE < startFAE.AddMonths(11) ? startFAE.AddMonths(11) : lastMilestoneFAE;
 
-                // Charge les JH pour chaque année de l'horizon
-               for (int year = startFAE.Year; year <= endFAE.Year; year++)
-{
-    // Retour du service : (profilDbId, mois) -> decimal? JH
-    var monthDictYear = await ProfileMonthlySvc.LoadAsync(project.Id, year);
+                // bornes d’horizon : au minimum (min(planningYear,currentYear)-buffer) … (max(jalon,currentYear)+buffer)
+                int beginYear = Math.Min(planningYear, currentYear) - PAST_BUFFER_YEARS;
+                int endYear = Math.Max(lastMilestoneFAE.Year, currentYear) + FUTURE_BUFFER_YEARS;
 
-    foreach (var r in project.Profils)
-    {
-        if (r.DbRowId is not int pid) continue;
+                // sécurité
+                beginYear = Math.Max(2000, beginYear);
+                endYear = Math.Min(2100, endYear);
 
-        for (int m = 1; m <= 12; m++)
-        {
-            // dt = mois courant de l’horizon
-            var dt = new DateTime(year, m, 1);
+                // === CHARGEMENT MULTI-ANNÉES DEPUIS LA BDD UNIQUEMENT ===
+                _jhAllYears.Clear();
 
+                for (int year = beginYear; year <= endYear; year++)
+                {
+                    // BDD : (profilDbId, mois) -> decimal? JH
+                    var monthDictYear = await ProfileMonthlySvc.LoadAsync(project.Id, year);
+
+                    foreach (var r in project.Profils)
+                    {
+                        if (r.DbRowId is not int pid) continue;
+
+                        for (int m = 1; m <= 12; m++)
+                        {
                             decimal jh = 0m;
 
-                            // 1) clé 1..12 (index 1-based)
+                            // 1) clé 1..12
                             if (monthDictYear.TryGetValue((pid, m), out var v1) && v1.HasValue)
                                 jh = v1.Value;
-                            // 2) clé 0..11 (index 0-based, utile si l’historique en BDD a varié)
+                            // 2) clé 0..11 (ancien schéma possible)
                             else if (monthDictYear.TryGetValue((pid, m - 1), out var v0) && v0.HasValue)
                                 jh = v0.Value;
 
-                            // 3) plus de fallback UI : si absent en BDD => 0
+                            // ❗ Aucun fallback UI ici
                             _jhAllYears[(pid, year, m)] = jh;
+                        }
+                    }
+                }
 
-        }
-    }
-}
-
-                // === FIN CHARGEMENT JH MULTI-ANNÉES ===
-
-
-
+                // (optionnel) petit log de contrôle
+                // var totalAll = _jhAllYears.Values.Sum();
+                // Console.WriteLine($"[DEBUG] Total JH toutes années = {totalAll}");
 
 
+                // === FIN CHARGEMENT JH MULTI-ANNEES ===
 
-                // 2) Recalculer les colonnes calculées pour l'affichage
+                // 6) Maintenant qu’on a _jhAllYears, on hydrate l’UI de l’année visible
+                await LoadPlanningYearAsync(currentYear);
+
+                // 7) Recalculs d’affichage
                 ProfilComputeService.ComputeAll(project);
                 var map = FaeBuildCoutEngageCumul();
-                
 
-                Console.WriteLine($"[FAE] Server: keys={map.Count}, cumul(2026,2)={map.GetValueOrDefault((2026, 2), 0m)}");
-                await JS.InvokeVoidAsync("console.log", $"[FAE] Coût 2026-02 = {map.GetValueOrDefault((2026,2), 0m)}");
-                var sumJhFeb26 = project!.Profils.Sum(p => (p.DbRowId is int pid && _jhAllYears.TryGetValue((pid, 2026, 2), out var j)) ? j : 0m);
-                await JS.InvokeVoidAsync("console.log", $"[TEST] JH 2026-02 = {sumJhFeb26}");
-
-                
-
-
+                // (Logs de debug optionnels)
+                // Console.WriteLine($"[FAE] Server: keys={map.Count}");
             }
-
         }
-
         catch (Exception ex)
         {
             error = "Erreur lors du chargement : " + ex.Message;
         }
-        finally { loading = false; }
+        finally
+        {
+            loading = false;
+        }
     }
+
 
     // TSProjet.razor (section @code)
 private int currentYear;           // année visible dans le tableau
@@ -405,6 +419,38 @@ private bool planningDirty = false; // si des cases ont été modifiées
         StateHasChanged();
     }
 
+    // Somme des JH pour une année donnée (utile si tu as besoin d’afficher le total de l’année visible)
+    private decimal GetPlannedForYear(ProfilEntry r, int year)
+    {
+        if (r.DbRowId is not int pid) return 0m;
+
+        decimal sum = 0m;
+        for (int m = 1; m <= 12; m++)
+            if (_jhAllYears.TryGetValue((pid, year, m), out var v))
+                sum += v;
+        return sum;
+    }
+
+    // Somme des JH sur TOUTES les années (clé du problème)
+    private decimal GetPlannedAllYears(ProfilEntry r)
+    {
+        if (r.DbRowId is not int pid) return 0m;
+
+        decimal sum = 0m;
+        foreach (var kv in _jhAllYears)
+            if (kv.Key.profilId == pid)
+                sum += kv.Value;
+        return sum;
+    }
+
+    // Reste à répartir (toutes années)
+    private decimal GetRemainingAllYears(ProfilEntry r)
+    {
+        var total = r.ChargeJh ?? 0m;
+        var planned = GetPlannedAllYears(r);
+        var rest = total - planned;
+        return rest < 0 ? 0 : rest;   // si tu veux brider à 0
+    }
 
 //fonction année pl
 
@@ -515,6 +561,30 @@ private Task GoPrevYearAsync() => ChangeYearAsync(-1);
         ProjectPhase.TMA => "TMA",
         ProjectPhase.Provision => "Provision",
         _ => ph.ToString()
+    };
+    private static string Label(ProjectEtape et) => et switch
+    {
+        ProjectEtape.None => "—",
+        ProjectEtape.PilotageProjet => "Pilotage projet",
+        ProjectEtape.AnalyseDeLExistant => "Analyse de l'existant",
+        ProjectEtape.ConceptionGenerale => "Conception générale",
+        ProjectEtape.ConceptionTechniqueDetaillee => "Conception technique détaillée",
+        ProjectEtape.ConceptionFonctionnelleDetaillee => "Conception fonctionnelle détaillée",
+        ProjectEtape.EgornomieGraphisme => "Ergonomie / Graphisme",
+        ProjectEtape.CahierDeRecette => "Cahier de recette",
+        ProjectEtape.DeveloppementTestsUnitaires => "Développement & tests unitaires",
+        ProjectEtape.TestsIntegrationsARecetteInterne => "Tests d'intégration & recette interne",
+        ProjectEtape.LivraisonAInstallationAMiseEnOeuvre => "Livraison / Installation / Mise en œuvre",
+        ProjectEtape.Pilote => "Pilote",
+        ProjectEtape.Generalisation => "Généralisation",
+        ProjectEtape.Support => "Support",
+        ProjectEtape.RepriseDeContenu => "Reprise de contenu",
+        ProjectEtape.AssistanceRecette => "Assistance recette",
+        ProjectEtape.Formation => "Formation",
+        ProjectEtape.Garantie => "Garantie",
+        ProjectEtape.ProvisionPourRisque => "Provision pour risque",
+        ProjectEtape.HorsAbaques => "Hors abaques",
+        _ => et.ToString()
     };
 
     private RenderFragment StatusWithPhase(ProjectStatus s, ProjectPhase? ph) => builder =>
@@ -901,11 +971,416 @@ private async Task DeletePrestaAsync(AchatPrestataireItem row)
     }
 }
 
+// ==============WORLOAD=================//
+// ======================================//
+private HashSet<Guid> wlDeleted = new();   // Id des lignes à supprimer en BD au prochain "Enregistrer"
+
+private bool saving = false;
+private DateTime? lastSavedAt;
+private string? saveError;
+
+private async Task SaveWorkloadAsync()
+{
+    if (project is null) return;
+    // 0) d’abord, on supprime en base ce que l’utilisateur a retiré
+    if (wlDeleted.Count > 0)
+    {
+        await WorkloadService.DeleteRowsAsync(wlDeleted);
+        wlDeleted.Clear(); // on vide la liste, c’est fait
+    }
 
 
+    // --- Parents : ne pas persister Phase / Étape ---
+    foreach (var row in wlRows.Where(x => x.ParentId is null))
+    {
+        row.Phase = string.Empty;   // ou: null si colonne nullable
+        row.Etape = string.Empty;   // ou: null si colonne nullable
+    }
+
+    saving = true;
+    saveError = null;
+    StateHasChanged();
+
+    try
+    {
+        // 1) UPSERT des lignes
+        foreach (var row in wlRows)
+            await WorkloadService.UpdateRowAsync(row);
+
+        // 2) Puis les allocations JH (enfants uniquement)
+        foreach (var row in wlRows.Where(x => x.ParentId is not null))
+            foreach (var kv in row.ChargesByProfile)
+                await WorkloadService.UpdateAllocationAsync(row.Id, kv.Key, kv.Value);
+
+        // 3) Recharger depuis la BD (facultatif mais propre)
+        wlRows = await WorkloadService.LoadAsync(project.Id);
+        lastSavedAt = DateTime.Now;
+    }
+    catch (Exception ex)
+    {
+        saveError = ex.Message;
+    }
+    finally
+    {
+        saving = false;
+        StateHasChanged();
+    }
+}
+
+// couleurs 
+private static string PhaseCss(string? phase)
+{
+    if (string.IsNullOrWhiteSpace(phase)) return string.Empty;
+
+    switch (phase.Trim().ToLowerInvariant())
+    {
+        case "pilotage": return "wl-ph-pilotage";
+        case "conception": return "wl-ph-conception";
+        case "construction": return "wl-ph-construction";
+        case "validation": return "wl-ph-validation";
+        case "finalisation": return "wl-ph-finalisation";
+        case "garantie": return "wl-ph-garantie";
+        case "tma": return "wl-ph-tma";
+        case "provision": return "wl-ph-provision";
+        default: return string.Empty;
+    }
+}
+
+
+
+private sealed record WlProfile(int ProfileId, string Name, decimal CostPerDay, decimal PricePerDay);
+
+private WorkloadItem? wlSelected;
+private void ToggleRowMenu(WorkloadItem r) => wlMenuOpenFor = wlMenuOpenFor == r.Id ? null : r.Id;
+
+// --- menu contextuel (⋮) ---
+private Guid? wlMenuOpenFor = null;
+
+// --- seed : toujours 1 grande étape vide au démarrage / après suppression totale ---
+private void EnsureSeedRow()
+{
+    if (wlRows.Count == 0)
+    {
+        wlRows.Add(new WorkloadItem
+        {
+            Id = Guid.NewGuid(),
+            ProjectId = project!.Id,
+            ParentId = null,
+            OrderIndex = 1
+        });
+        wlSelected = wlRows[0];
+    }
+}
+
+//protected override void OnInitialized() => EnsureSeedRow();
+
+
+
+// --- profils dynamiques (colonnes) ---
+// --- profils dynamiques (colonnes) ---
+private List<WlProfile> WlGetProfiles()
+{
+    var list = new List<WlProfile>();
+    if (project?.Profils is null) return list;
+
+    foreach (var pr in project.Profils)
+    {
+        // on ne garde que les profils qui ont l'ID PERSISTANT en BD
+        if (pr.DbRowId is not int pid) continue;
+
+        // coût interne & TJM (existant dans ton code)
+        decimal coutJour = (pr.Prcs ?? pr.Cjm ?? 0m);
+        if (pr.Entite == EntiteType.CESSION)
+            coutJour += (pr.FraisDeplacementSiCession ?? 0m);
+
+        decimal tjm = pr.Tjm ?? coutJour;
+        string name = string.IsNullOrWhiteSpace(pr.Profil) ? $"Profil {pid}" : pr.Profil;
+
+        // ⚠️ on fixe bien l'ID utilisé par la BD (pid)
+        list.Add(new WlProfile(pid, name, coutJour, tjm));
+
+    }
+
+    return list;
+}
+
+
+// --- ordre d’affichage + re-séquencement ---
+private IEnumerable<WorkloadItem> WlOrderedRows() => wlRows.OrderBy(x => x.OrderIndex);
+private void WlResequence()
+{
+    int i = 1;
+    foreach (var r in wlRows.OrderBy(x => x.OrderIndex))
+        r.OrderIndex = i++;
+}
+
+// --- affichage ID hiérarchique (1, 1.1…) ---
+private string WlDisplayId(WorkloadItem r)
+{
+    var parents = wlRows.Where(x => x.ParentId is null).OrderBy(x => x.OrderIndex).ToList();
+
+    if (r.ParentId is null)
+    {
+        var pi = parents.FindIndex(x => x.Id == r.Id) + 1;
+        return pi.ToString();
+    }
+    else
+    {
+        var parent = wlRows.FirstOrDefault(x => x.Id == r.ParentId);
+        if (parent is null) return "?";
+        var pi = parents.FindIndex(x => x.Id == parent.Id) + 1;
+
+        var children = wlRows.Where(x => x.ParentId == parent.Id).OrderBy(x => x.OrderIndex).ToList();
+        var ci = children.FindIndex(x => x.Id == r.Id) + 1;
+        return $"{pi}.{ci}";
+    }
+}
+
+// --- actions "menu ⋮" : insérer / supprimer ---
+private async Task WlInsertParentBelowAt(WorkloadItem r){
+    int nextOrder;
+    if (r.ParentId is null)
+    {
+        // r = parent -> insérer après tout le bloc (parent + enfants)
+        int after = wlRows
+            .Where(x => x.Id == r.Id || x.ParentId == r.Id)
+            .Select(x => x.OrderIndex)
+            .DefaultIfEmpty(r.OrderIndex)
+            .Max();
+        nextOrder = after + 1;
+    }
+    else
+    {
+        // r = enfant -> insérer juste après cet enfant
+        nextOrder = r.OrderIndex + 1;
+    }
+
+    foreach (var it in wlRows.Where(x => x.OrderIndex >= nextOrder))
+        it.OrderIndex++;
+
+    var newParent = new WorkloadItem
+    {
+        Id = Guid.NewGuid(),
+        ProjectId = project!.Id,
+        ParentId = null,
+        OrderIndex = nextOrder
+    };
+    wlRows.Add(newParent);
+
+    WlResequence();
+    EnsureSeedRow();
+    wlMenuOpenFor = null;
+    await InvokeAsync(StateHasChanged);
+}
+
+private async Task WlInsertChildBelowAt(WorkloadItem r)
+{
+    var parent = (r.ParentId is null) ? r : wlRows.FirstOrDefault(x => x.Id == r.ParentId);
+    if (parent is null) return;
+
+    int nextOrder = (r.ParentId is null)
+        ? wlRows.Where(x => x.ParentId == parent.Id)
+               .Select(x => x.OrderIndex)
+               .DefaultIfEmpty(parent.OrderIndex)
+               .Max() + 1
+        : r.OrderIndex + 1;
+
+    foreach (var it in wlRows.Where(x => x.OrderIndex >= nextOrder))
+        it.OrderIndex++;
+
+    var child = new WorkloadItem
+    {
+        Id = Guid.NewGuid(),
+        ProjectId = project!.Id,
+        ParentId = parent.Id,
+        OrderIndex = nextOrder,
+        Lot = parent.Lot,
+        GroupCode = parent.GroupCode
+    };
+    wlRows.Add(child);
+
+
+    WlResequence();
+    EnsureSeedRow();
+    wlMenuOpenFor = null;
+    await InvokeAsync(StateHasChanged);
+}
+
+private void WlDeleteRow(WorkloadItem r)
+{
+    // 1) L’Id à supprimer : la ligne + ses enfants si c’est un parent
+    var ids = wlRows
+        .Where(x => x.Id == r.Id || x.ParentId == r.Id)
+        .Select(x => x.Id)
+        .ToList();
+
+    // 2) Marquer pour suppression en BD au clic "Enregistrer"
+    foreach (var id in ids)
+        wlDeleted.Add(id);
+
+    // 3) Retirer immédiatement de l’UI
+    wlRows.RemoveAll(x => ids.Contains(x.Id));
+
+    // 4) Resequencer l’affichage si tu as une numérotation/ordre
+    WlResequence();
+
+    // ⚠️ NE PAS recréer automatiquement un parent ici.
+    // EnsureSeedRow();  // <-- on supprime cette ligne pour éviter la réapparition
+
+    wlMenuOpenFor = null;
+    StateHasChanged();
+}
+
+
+// --- propagation Lot/GroupCode du parent vers enfants ---
+private void WlPropagateFromParent(WorkloadItem parent, bool lot = true, bool groupCode = true)
+{
+    foreach (var c in wlRows.Where(x => x.ParentId == parent.Id))
+    {
+        if (lot) c.Lot = parent.Lot;
+        if (groupCode) c.GroupCode = parent.GroupCode;
+    }
+}
+
+// --- édition des charges par profil ---
+private Task WlUpdateAlloc(WorkloadItem r, int profileId, string? raw)
+{
+    // accepte 1,5 et 1.5
+    decimal v = 0m;
+    if (!decimal.TryParse(raw, NumberStyles.Number, CultureInfo.GetCultureInfo("fr-FR"), out v))
+        decimal.TryParse(raw, NumberStyles.Number, CultureInfo.InvariantCulture, out v);
+
+    if (v < 0) v = 0m;
+    r.ChargesByProfile[profileId] = v;  // MAJ en mémoire seulement
+    return Task.CompletedTask;          // PAS d'appel au service ici
+}
+
+// --- agrégations (JH, coûts, valorisation) ---
+private decimal WlSumCharges(WorkloadItem row, List<WlProfile> profs)
+    => profs.Sum(p => row.ChargesByProfile.TryGetValue(p.ProfileId, out var v) ? v : 0m);
+
+private decimal WlSumChildrenCharges(Guid parentId, int profileId)
+    => wlRows.Where(c => c.ParentId == parentId)
+             .Sum(c => c.ChargesByProfile.TryGetValue(profileId, out var v) ? v : 0m);
+
+private decimal WlCostFor(WorkloadItem row, int profileId, decimal costPerDay)
+{
+    var jh = row.ChargesByProfile.TryGetValue(profileId, out var v) ? v : 0m;
+    return jh * costPerDay;
+}
+
+private decimal WlSumChildrenCosts(Guid parentId, int profileId, decimal costPerDay)
+    => wlRows.Where(c => c.ParentId == parentId)
+             .Sum(c => WlCostFor(c, profileId, costPerDay));
+
+private decimal WlValueFor(WorkloadItem row, int profileId, decimal pricePerDay)
+{
+    var jh = row.ChargesByProfile.TryGetValue(profileId, out var v) ? v : 0m;
+    return jh * pricePerDay;
+}
+
+private decimal WlSumChildrenValues(Guid parentId, int profileId, decimal pricePerDay)
+    => wlRows.Where(c => c.ParentId == parentId).Sum(c => WlValueFor(c, profileId, pricePerDay));
+
+private decimal WlSumRowCosts(WorkloadItem row, List<WlProfile> profs)
+    => profs.Sum(p => WlCostFor(row, p.ProfileId, p.CostPerDay));
+
+private decimal WlSumRowValues(WorkloadItem row, List<WlProfile> profs)
+    => profs.Sum(p => WlValueFor(row, p.ProfileId, p.PricePerDay));
+
+// --- totaux (entête) ---
+private IEnumerable<WorkloadItem> WlLeafRows() => wlRows.Where(r => r.ParentId is not null);
+
+private decimal WlTotalChargesForProfile(int profileId)
+    => WlLeafRows().Sum(r => r.ChargesByProfile.TryGetValue(profileId, out var v) ? v : 0m);
+
+private decimal WlTotalCostsForProfile(int profileId, decimal costPerDay)
+    => WlLeafRows().Sum(r => (r.ChargesByProfile.TryGetValue(profileId, out var v) ? v : 0m) * costPerDay);
+
+private decimal WlTotalValuesForProfile(int profileId, decimal pricePerDay)
+    => WlLeafRows().Sum(r => (r.ChargesByProfile.TryGetValue(profileId, out var v) ? v : 0m) * pricePerDay);
+
+private decimal WlGrandTotalJH() => WlLeafRows().Sum(r => r.ChargesByProfile.Values.Sum());
+private decimal WlGrandTotalCost(List<WlProfile> profs) => WlLeafRows().Sum(r => WlSumRowCosts(r, profs));
+private decimal WlGrandTotalValue(List<WlProfile> profs) => WlLeafRows().Sum(r => WlSumRowValues(r, profs));
+
+
+
+// 1) Options de PHASE = toutes les valeurs de l’énum (hors None)
+private IReadOnlyList<ProjectPhase> PhaseEnumOptions =>
+    Enum.GetValues<ProjectPhase>().Where(p => p != ProjectPhase.None).ToList();
+
+// 2) Options d’ETAPE pour une PHASE donnée
+//    - si un mapping est défini ci-dessous, on filtre
+//    - sinon, on affiche toutes les étapes (hors None)
+private IReadOnlyList<ProjectEtape> EtapeEnumOptionsFor(ProjectPhase _)
+    => Enum.GetValues<ProjectEtape>()
+           .Where(e => e != ProjectEtape.None)
+           .ToList();
+
+// 3) Mapping PHASE -> ETAPES (remplis au fur et à mesure ; à défaut : toutes les étapes)
+// 3) Mapping PHASE -> ETAPES (uniquement avec les membres de ton enum ProjectEtape)
+private static readonly Dictionary<ProjectPhase, ProjectEtape[]> PhaseToEtapes = new()
+{
+    { ProjectPhase.Pilotage, new[] {
+        ProjectEtape.PilotageProjet
+    }},
+    { ProjectPhase.Conception, new[] {
+        ProjectEtape.AnalyseDeLExistant,
+        ProjectEtape.ConceptionGenerale,
+        ProjectEtape.ConceptionTechniqueDetaillee,
+        ProjectEtape.ConceptionFonctionnelleDetaillee,
+        ProjectEtape.EgornomieGraphisme,
+        ProjectEtape.CahierDeRecette
+    }},
+    { ProjectPhase.Construction, new[] {
+        ProjectEtape.DeveloppementTestsUnitaires,
+        ProjectEtape.RepriseDeContenu,
+        ProjectEtape.Support
+    }},
+    { ProjectPhase.Validation, new[] {
+        ProjectEtape.TestsIntegrationsARecetteInterne,
+        ProjectEtape.AssistanceRecette
+    }},
+    { ProjectPhase.Finalisation, new[] {
+        ProjectEtape.LivraisonAInstallationAMiseEnOeuvre,
+        ProjectEtape.Generalisation,
+        ProjectEtape.Formation
+    }},
+    { ProjectPhase.Garantie, new[] {
+        ProjectEtape.Garantie
+    }},
+    { ProjectPhase.TMA, new[] {
+        ProjectEtape.Support
+    }},
+    { ProjectPhase.Provision, new[] {
+        ProjectEtape.ProvisionPourRisque
+    }},
+};
+
+// 4) Conversion string (stockée dans ) <-> enum
+private static bool TryParsePhase(string? s, out ProjectPhase phase)
+    => Enum.TryParse<ProjectPhase>(s ?? "", ignoreCase: true, out phase);
+
+private static bool TryParseEtape(string? s, out ProjectEtape etape)
+    => Enum.TryParse<ProjectEtape>(s ?? "", ignoreCase: true, out etape);
+
+// 5) Handlers des selects
+private void OnPhaseChanged(WorkloadItem row, ChangeEventArgs e)
+{
+    row.Phase = e.Value?.ToString() ?? "";
+    StateHasChanged();
+}
+
+private void OnEtapeChanged(WorkloadItem row, ChangeEventArgs e)
+{
+    row.Etape = e.Value?.ToString() ?? "";
+}
 
 
 }
+
+
 
 @if (loading)
 {
@@ -962,7 +1437,7 @@ else if (project is not null)
             <li class="nav-item">
                 <button class="nav-link @(activeTab == "x" ? "active" : "")"
                         @onclick='() => activeTab = "x"'>
-                    XXXXXXXXXXXX
+                    Workload
                 </button>
             </li>
 
@@ -1200,243 +1675,293 @@ else if (project is not null)
     }
 
     @* --- Onglet 3 : Ressources & Charges --- *@
+
     else if (activeTab == "resources")
     {
-        <div class="card shadow-sm">
-            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-                <div class="fw-semibold">Ressources & Charges — PROFIL</div>
-
-                <div class="d-flex align-items-center gap-2">
-                    <div class="input-group input-group-sm" style="width:240px">
-                        <span class="input-group-text">% Remise TJM</span>
-                        <InputNumber TValue="decimal?"
-                                     class="form-control"
-                                     Value="project.RemiseTjmPercent"
-                                     ValueChanged="@(v => { project.RemiseTjmPercent = v; RecomputeAll(); })"
-                                     ValueExpression="(() => project.RemiseTjmPercent)" />
-                        <span class="input-group-text">%</span>
-                    </div>
-
-                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="AddProfilRow">Ajouter une ligne</button>
-                    <button type="button" class="btn btn-primary btn-sm" @onclick="SaveResources">Enregistrer</button>
-                </div>
-            </div>
-
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-sm align-middle mb-0">
-                        @{
-                            var rows = project?.Profils ?? new List<ProfilEntry>();
-
-                            decimal totalCharge = rows.Sum(r => r.ChargeJh ?? 0m);
-                            decimal totalCA = rows.Sum(r => r.CaEuro ?? 0m);
-                            decimal totalCoutExa = rows.Sum(r => r.CoutExakisNeliteEuro ?? 0m);
-                            decimal totalCoutAgence = rows.Sum(r => r.CoutAgenceEuro ?? 0m);
-
-                            // Marges globales (même logique que l’Excel) = (ΣCA - ΣCoût)/ΣCA
-                            decimal? margeGlobaleExa = totalCA > 0 ? (totalCA - totalCoutExa) / totalCA : null;
-                            decimal? margeGlobaleAgence = totalCA > 0 ? (totalCA - totalCoutAgence) / totalCA : null;
-                        }
-
-                        <thead class="table-light">
-                            <tr>
-                                <th class="col-profil">PROFIL</th>
-                                <th>Entité</th>
-                                <th class="num">TJM (€/j)</th>
-                                <th class="num">CJM (€/j)</th>
-                                <th class="num hide-md">PRCS (€/j)</th>
-                                <th class="num hide-md">Frais Déplacement (si Cession) €</th>
-                                <th class="num hide-md">TCI / PRCS (€/j)</th>
-                                <th class="num">Charge (jh)</th>
-                                <th class="num">CA (€)</th>
-                                <th class="num hide-md">COUT Exakis Nelite (€)</th>
-                                <th class="num hide-md">COUT AGENCE (€)</th>
-                                <th class="pct hide-md"> PROFIL %jh</th>
-                                <th class="pct hide-md"> PROFIL %€</th>
-                                <th class="pct hide-md">Marge /Profil Exakis Nelite</th>
-                                <th class="pct hide-md">Marge /Profil AGENCE</th>
-                                <th style="width:48px"></th>
-                            </tr>
-                        </thead>
-
-
-                        <tbody>
-                            @if (project?.Profils is null || project.Profils.Count == 0)
-                            {
-                                <tr>
-                                    <td colspan="16" class="text-center text-muted py-3">
-                                        Aucune ligne — cliquez « Ajouter une ligne ».
-                                    </td>
-                                </tr>
-                            }
-                            else
-                            {
-                                @foreach (var row in project.Profils)
-                                {
-                                    <tr>
-                                        <!-- PROFIL -->
-                                        <td>
-                                            <input class="form-control form-control-sm"
-                                                   value="@row.Profil"
-                                                   @oninput="e => row.Profil = e.Value?.ToString() ?? string.Empty"
-                                                   placeholder="Saisir le profil…" />
-
-
-                                        </td>
-
-
-
-                                        <!-- Entité -->
-                                        <td>
-                                            <InputSelect TValue="EntiteType"
-                                                         class="form-select form-select-sm"
-                                                         Value="row.Entite"
-                                                         ValueChanged="@(v => { row.Entite = v; RecomputeAll(); })"
-                                                         ValueExpression="(() => row.Entite)">
-                                                @foreach (var e in Enum.GetValues<EntiteType>())
-                                                {
-                                                    <option value="@e">@e</option>
-                                                }
-                                            </InputSelect>
-                                        </td>
-
-                                        <!-- TJM -->
-                                        <td>
-                                            <InputNumber TValue="decimal?"
-                                                         class="form-control form-control-sm"
-                                                         Value="row.Tjm"
-                                                         ValueChanged="@(v => { row.Tjm = v; RecomputeAll(); })"
-                                                         ValueExpression="(() => row.Tjm)" />
-                                        </td>
-
-                                        <!-- CJM -->
-                                        <td>
-                                            <InputNumber TValue="decimal?"
-                                                         class="form-control form-control-sm"
-                                                         Value="row.Cjm"
-                                                         ValueChanged="@(v => { row.Cjm = v; RecomputeAll(); })"
-                                                         ValueExpression="(() => row.Cjm)" />
-                                        </td>
-
-                                        <!-- PRCS (readonly car calculé pour BO/BO_XP/ACHAT_BO) -->
-                                        <td>
-                                            <input class="form-control form-control-sm" value="@(row.Prcs?.ToString("N2"))" readonly />
-                                        </td>
-
-                                        <!-- Frais Déplacement (si Cession) -->
-                                        <td>
-                                            <InputNumber TValue="decimal?"
-                                                         class="form-control form-control-sm"
-                                                         Value="row.FraisDeplacementSiCession"
-                                                         ValueChanged="@(v => { row.FraisDeplacementSiCession = v; RecomputeAll(); })"
-                                                         ValueExpression="(() => row.FraisDeplacementSiCession)" />
-                                        </td>
-
-                                        <!-- TCI/PRCS (readonly) -->
-                                        <td>
-                                            <input class="form-control form-control-sm" value="@(row.TciOverPrcs?.ToString("N2"))" readonly />
-                                        </td>
-
-                                        <!-- Charge (jh) -->
-                                        <td>
-                                            <InputNumber TValue="decimal?"
-                                                         class="form-control form-control-sm"
-                                                         Value="row.ChargeJh"
-                                                         ValueChanged="@(v => { row.ChargeJh = v; RecomputeAll(); })"
-                                                         ValueExpression="(() => row.ChargeJh)" />
-                                        </td>
-
-                                        <!-- CA (€) (readonly) -->
-                                        <td><input class="form-control form-control-sm" value="@(row.CaEuro?.ToString("N2"))" readonly /></td>
-
-                                        <!-- COUT Exakis Nelite (€) (readonly) -->
-                                        <td><input class="form-control form-control-sm" value="@(row.CoutExakisNeliteEuro?.ToString("N2"))" readonly /></td>
-
-                                        <!-- COUT AGENCE (€) (readonly) -->
-                                        <td><input class="form-control form-control-sm" value="@(row.CoutAgenceEuro?.ToString("N2"))" readonly /></td>
-
-                                        <!-- %jh PROFIL (readonly) -->
-                                        <td><input class="form-control form-control-sm" value="@(row.PercentJhProfil is null ? "" : (row.PercentJhProfil.Value * 100m).ToString("N2") + " %")" readonly /></td>
-
-                                        <!-- %€ PROFIL (readonly) -->
-                                        <td><input class="form-control form-control-sm" value="@(row.PercentEuroProfil is null ? "" : (row.PercentEuroProfil.Value * 100m).ToString("N2") + " %")" readonly /></td>
-
-                                        <!-- Marges (readonly) -->
-                                        <td><input class="form-control form-control-sm" value="@(row.MargeProfilExa is null ? "" : (row.MargeProfilExa.Value * 100m).ToString("N2") + " %")" readonly /></td>
-                                        <td><input class="form-control form-control-sm" value="@(row.MargeProfilAgence is null ? "" : (row.MargeProfilAgence.Value * 100m).ToString("N2") + " %")" readonly /></td>
-
-                                        <!-- Supprimer -->
-                                        <td class="text-end">
-                                            <button type="button" class="btn btn-outline-danger btn-sm" @onclick="@(() => RemoveProfilRow(row))">❌</button>
-                                        </td>
-                                    </tr>
-                                }
-                            }
-                        </tbody>
-                        <tfoot class="table-light">
-                            <tr>
-                                <th>TOTAL</th>
-                                <th></th>                 @* Entité *@
-                                <th></th>                 @* TJM *@
-                                <th></th>                 @* CJM *@
-                                <th class="hide-md"></th> @* PRCS *@
-                                <th class="hide-md"></th> @* Frais Déplacement *@
-                                <th class="hide-md"></th> @* TCI/PRCS *@
-
-                                <th class="num">@Num(totalCharge)</th>                  @* Charge (jh) *@
-                                <th class="num">@Money(totalCA)</th>                    @* CA (€) *@
-                                <th class="num hide-md">@Money(totalCoutExa)</th>       @* COUT Exakis Nelite (€) *@
-                                <th class="num hide-md">@Money(totalCoutAgence)</th>    @* COUT AGENCE (€) *@
-
-                                <th class="pct hide-md"></th>                           @* %jh PROFIL (pas de somme) *@
-                                <th class="pct hide-md"></th>                           @* %€ PROFIL (pas de somme) *@
-
-                                <th class="pct hide-md">@Pct(margeGlobaleExa)</th>      @* Marge globale Exa *@
-                                <th class="pct hide-md">@Pct(margeGlobaleAgence)</th>   @* Marge globale Agence *@
-
-                                <th></th>  @* colonne actions *@
-                            </tr>
-                        </tfoot>
-
-                    </table>
-                </div>
-            </div>
-
-            <div class="card-footer d-flex gap-2">
-                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="AddProfilRow">Ajouter une ligne</button>
-                <button type="button" class="btn btn-primary btn-sm" @onclick="SaveResources">Enregistrer</button>
-            </div>
-        </div>
-        @if (projectTjms?.Any() == true)
-        {
-            <!-- ====== Agences (exactement comme l’Excel) ====== -->
-            @RenderRefTableSimple("Agences : TJM / CJM (référence)", "Agences",
-            new[] { "TJM Paris", "CJM Paris", "TJM Région", "CJM Région" })
-
-            <!-- ====== CES Log ====== -->
-            @RenderRefTableSimple("CES Log : TJM / CJM / PRCS (référence)", "CES Log",
-                    new[] { "TJM CES", "CJM CES", "PRCS CES" })
-
-            <!-- ====== CES Infra ====== -->
-            @RenderRefTableSimple("CES Infra : TJM / CJM (référence)", "CES Infra",
-                    new[] { "TJM CES", "CJM CES" })
-}
-
-
-
-
-
+        <ProjectResources Rows="project?.Profils"
+                          RemiseTjmPercent="project?.RemiseTjmPercent"
+                          ProjectTjms="projectTjms"
+                          OnAddRow="AddProfilRow"
+                          OnSave="SaveResources"
+                          OnRemoveRow="RemoveProfilRow"
+                          OnRecompute="RecomputeAll"
+                          OnRemiseChanged="@( (decimal? v) => { project!.RemiseTjmPercent = v; RecomputeAll(); } )"
+                          Money="Money"
+                          Num="Num"
+                          Pct="Pct"
+                          RenderRefTableSimple="RenderRefTableSimple" />
     }
+
     @* --- Onglet : X --- *@
     else if (activeTab == "x")
-    {
-        <div class="card shadow-sm">
-            <div class="card-header">Onglet X</div>
-            <div class="card-body text-muted">
-                Contenu de l’onglet X — à venir.
-            </div>
+{
+        @* ======== WORKLOAD (HTML/Razor prêt à coller) ======== *@
+
+        <div class="fw-semibold mb-2">Workload</div>
+
+
+
+        <div class="d-flex align-items-center gap-2 mb-2">
+            <button class="btn btn-primary btn-sm"
+                    disabled="@saving"
+                    @onclick="SaveWorkloadAsync">
+                @(saving ? "Enregistrement..." : "Enregistrer")
+            </button>
+
+            @if (lastSavedAt is not null)
+            {
+                <span class="text-muted small">Dernier enregistrement : @lastSavedAt?.ToString("HH:mm:ss")</span>
+            }
+            @if (!string.IsNullOrEmpty(saveError))
+            {
+                <span class="text-danger small">(@saveError)</span>
+            }
         </div>
-    }
+
+        <div class="table-responsive wl-wrap" @onclick="() => wlMenuOpenFor = null">
+            <table class="table table-sm wl-table mb-0">
+                @{
+                    // Déclaration UNIQUE pour éviter tout conflit
+                    var profs = WlGetProfiles();
+                    int n = profs.Count;
+                }
+
+                <colgroup>
+                    <col style="width:2.5rem;">   @* Actions (⋮) *@
+                    <col style="width:5.5rem;">   @* ID *@
+                    <col style="width:9rem;">     @* Lot *@
+                    <col style="width:10rem;">    @* Phase *@
+                    <col style="width:12rem;">    @* Étape *@
+                    <col style="min-width:36rem;">@* Tâche *@
+                    <col style="width:7rem;">     @* Total JH *@
+                    <col style="width:11rem;">    @* Total Valorisation *@
+                    @for (int i = 0; i < n; i++)
+                    {
+                        <col style="width:6.5rem;">
+                    }
+          @* JH par profil *@
+                    @for (int i = 0; i < n; i++)
+                    {
+                        <col style="width:8rem;">
+                    }
+            @* € par profil *@
+                    <col style="width:14rem;">    @* Livrable *@
+                    <col style="width:18rem;">    @* Commentaire *@
+                </colgroup>
+
+                <thead>
+                    @* -------- Ligne 1 : groupes principaux -------- *@
+                    <tr class="wl-head-group">
+                        <th rowspan="2"></th>  @* Actions *@
+                        <th rowspan="2" class="wl-head-structure">ID</th>
+                        <th rowspan="2" class="wl-head-structure">Lot</th>
+                        <th rowspan="2" class="wl-head-structure">Phase</th>
+                        <th rowspan="2" class="wl-head-structure">Étape</th>
+                        <th rowspan="2" class="wl-head-structure wl-sep-right">Tâche</th>
+
+                        <th colspan="2" class="text-center wl-head-total wl-sep-right">SOUS TOTAL</th>
+                        <th colspan="@n" class="text-center wl-head-profil-jh wl-sep-right">Charge par profil</th>
+                        <th colspan="@n" class="text-center wl-head-profil-eu wl-sep-right">Valorisation par profil</th>
+
+                        <th rowspan="2" class="wl-head-comment">Livrable</th>
+                        <th rowspan="2" class="wl-head-comment">Hypothèses/Commentaire</th>
+                    </tr>
+
+                    @* -------- Ligne 2 : sous-colonnes -------- *@
+                    <tr>
+                        <th class="text-end wl-head-total">TOTAL Charge</th>
+                        <th class="text-end wl-head-total wl-sep-right">TOTAL Valorisation</th>
+
+                        @for (var i = 0; i < profs.Count; i++)
+                        {
+                            var p = profs[i];
+                            var cls = $"text-end wl-head-profil-jh {(i == profs.Count - 1 ? "wl-sep-right" : "")}";
+                            <th class="@cls">@p.Name<br /><small>(JH)</small></th>
+                        }
+
+                        @for (var i = 0; i < profs.Count; i++)
+                        {
+                            var p = profs[i];
+                            var cls = $"text-end wl-head-profil-eu {(i == profs.Count - 1 ? "wl-sep-right" : "")}";
+                            <th class="@cls">@p.Name<br /><small>(€)</small></th>
+                        }
+                    </tr>
+
+                    @* -------- Ligne 3 : bandeau "SOUS-TOTAL visibles" -------- *@
+                    <tr class="wl-subtotalbar">
+                        <th></th>  @* Actions *@
+                        <th colspan="5" class="text-end text-muted">SOUS-TOTAL visibles :</th>
+
+                        <th class="text-end fw-semibold">@WlGrandTotalJH().ToString("N2")</th>
+                        <th class="text-end fw-semibold wl-sep-right">@WlGrandTotalValue(profs).ToString("N2")</th>
+
+                        @for (var i = 0; i < profs.Count; i++)
+                        {
+                            var p = profs[i];
+                            var cls = $"text-end fw-semibold {(i == profs.Count - 1 ? "wl-sep-right" : "")}";
+                            <th class="@cls">@WlTotalChargesForProfile(p.ProfileId).ToString("N2")</th>
+                        }
+
+                        @for (var i = 0; i < profs.Count; i++)
+                        {
+                            var p = profs[i];
+                            var cls = $"text-end fw-semibold {(i == profs.Count - 1 ? "wl-sep-right" : "")}";
+                            <th class="@cls">@WlTotalValuesForProfile(p.ProfileId, p.PricePerDay).ToString("N2")</th>
+                        }
+
+                        <th></th>
+                        <th></th>
+                    </tr>
+                </thead>
+
+
+                <tbody>
+                    @foreach (var r in WlOrderedRows())
+                    {
+                        var isParent = r.ParentId is null;
+                        var cls = $"{PhaseCss(r.Phase)} {(isParent ? "wl-parent" : "")}";
+
+
+                        <tr class="@cls" @onclick="@(() => { wlSelected = r; wlMenuOpenFor = null; })">
+                            <!-- Actions (menu 100% Blazor) -->
+                            <td class="text-center position-relative" @onclick:stopPropagation="true">
+                                <button class="btn btn-link btn-sm p-0" title="Actions" @onclick="() => ToggleRowMenu(r)">
+                                    &#8942;  @* ⋮ *@
+                                </button>
+
+                                @if (wlMenuOpenFor == r.Id)
+                                {
+                                    <div class="wl-menu">
+                                        <button class="dropdown-item" @onclick="() => WlInsertParentBelowAt(r)">+ Grande étape dessous</button>
+                                        <button class="dropdown-item" @onclick="() => WlInsertChildBelowAt(r)">+ Sous-étape dessous</button>
+                                        <hr class="dropdown-divider" />
+                                        <button class="dropdown-item text-danger" @onclick="() => WlDeleteRow(r)">Supprimer la ligne</button>
+                                    </div>
+                                }
+                            </td>
+
+                            <!-- ID -->
+                            <td>@WlDisplayId(r)</td>
+
+                            <!-- Lot -->
+                            <td>
+                                @if (isParent)
+                                {
+                                    <input class="form-control form-control-sm"
+                                           @bind="r.Lot"
+                                           @bind:after="() => WlPropagateFromParent(r, lot: true, groupCode: false)" />
+                                }
+                                else
+                                {
+                                    <input class="form-control form-control-sm" @bind="r.Lot" />
+                                }
+                        </td>
+
+                        <!-- Phase / Étape -->
+                            <!-- Phase (select enum) -->
+                            <td>
+                                @if (isParent)
+                                {
+                                    <div class="text-muted small"></div>
+                                }
+                                else
+                                {
+                                    <InputSelect class="form-select form-select-sm" @bind-Value="r.Phase">
+                                        @foreach (var ph in Enum.GetValues<ProjectPhase>())
+                                        {
+                                            if (ph == ProjectPhase.None) continue;
+                                            <option value="@Label(ph)">@Label(ph)</option>
+                                        }
+                                    </InputSelect>
+                                }
+                            </td>
+
+
+                            <!-- Étape (select dépendant de la phase) -->
+                            <!-- Étape (liste complète, non filtrée) -->
+                            <td>
+                                @if (isParent)
+                                {
+                                    <div class="text-muted small"></div>
+                                }
+                                else
+                                {
+                                    <InputSelect class="form-select form-select-sm" @bind-Value="r.Etape">
+                                        @foreach (var et in Enum.GetValues<ProjectEtape>())
+                                        {
+                                            if (et == ProjectEtape.None) continue;
+                                            <option value="@Label(et)">@Label(et)</option>
+                                        }
+                                    </InputSelect>
+                                }
+                            </td>
+
+
+
+
+                        <!-- Tâche -->
+                        <td><input class="form-control form-control-sm" @bind="r.Tache" /></td>
+
+                        <!-- TOTAL JH -->
+                        <td class="text-end">@WlSumCharges(r, profs).ToString("N2")</td>
+
+                        <!-- TOTAL Valorisation (€) -->
+                            <td class="text-end">@((isParent ? wlRows.Where(c => c.ParentId == r.Id).Sum(c => WlSumRowValues(c, profs)) : WlSumRowValues(r, profs)).ToString("N2"))</td>
+
+
+
+                            @* CHARGES (JH) par profil *@
+
+                @foreach (var p in profs)
+                            {
+                                if (isParent)
+                                {
+                                    <td class="text-end">@WlSumChildrenCharges(r.Id, p.ProfileId).ToString("N2")</td>
+                                }
+                                else
+                                {
+                                    // 1) lire le JH du dictionnaire
+                                    var has = r.ChargesByProfile.TryGetValue(p.ProfileId, out var jh);
+                                    // 2) valeur affichée pour <input type="number"> -> DOIT être avec un point
+                                    var s = has ? jh.ToString(CultureInfo.InvariantCulture) : string.Empty;
+
+                                    <td>
+                                        <input type="number" step="0.5"
+                                               class="form-control form-control-sm text-end"
+                                               value="@s"
+                                               @onchange="(ChangeEventArgs e) => WlUpdateAlloc(r, p.ProfileId, e.Value?.ToString())" />
+                                    </td>
+                                }
+                            }
+
+
+                            @* VALORISATION (€) par profil *@
+                            @foreach (var p in profs)
+                            {
+                                if (isParent)
+                                {
+                                    <td class="text-end">@WlSumChildrenValues(r.Id, p.ProfileId, p.PricePerDay).ToString("N2")</td>
+                                }
+                                else
+                                {
+                                    <td class="text-end">@WlValueFor(r, p.ProfileId, p.PricePerDay).ToString("N2")</td>
+                                }
+                            }
+
+                            <!-- Livrable / Commentaire -->
+                            <td><input class="form-control form-control-sm" @bind="r.Livrable" /></td>
+                            <td><input class="form-control form-control-sm" @bind="r.Commentaire" /></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+
+
+
+}
+
 
 
     @* --- Onglet 4 : Budget & Finances --- *@
@@ -1750,6 +2275,9 @@ else if (project is not null)
 
 
     }
+
+
+
 @* --- Onglet 5 : Planning & Jalons --- *@
 else if (activeTab == "planning")
 {
@@ -1782,20 +2310,32 @@ else if (activeTab == "planning")
                 string LabelMois(int month) =>
                     culture.DateTimeFormat.GetAbbreviatedMonthName(month) + "." + (planYear % 100).ToString("00");
 
-                decimal[] totalParMois = new decimal[12];
-                decimal totalChargeTousProfils = 0m;
-                decimal totalSaisieMoisTousProfils = 0m;
+                    decimal[] totalParMois = new decimal[12];   // <-- on garde: total des 12 mois de l’année visible
+                    decimal totalChargeTousProfils = 0m;
+                    decimal totalPlanifieTousProfilsToutesAnnees = 0m;
 
-                foreach (var r in project.Profils)
-                {
-                    for (int m = 0; m < 12; m++)
-                        totalParMois[m] += r.Months?[m] ?? 0m;
+                    foreach (var r in project.Profils)
+                    {
+                        // Total mensuel de l’ANNÉE COURANTE (pour les 12 colonnes)
+                        for (int m = 0; m < 12; m++)
+                            totalParMois[m] += r.Months?[m] ?? 0m;
 
-                    totalChargeTousProfils += r.ChargeJh ?? 0m;
-                    totalSaisieMoisTousProfils += (r.Months ?? Array.Empty<decimal?>()).Sum(v => v ?? 0m);
-                }
+                        // Total charge globale (cible à répartir)
+                        totalChargeTousProfils += r.ChargeJh ?? 0m;
 
-                decimal totalEcartTousProfils = totalSaisieMoisTousProfils - totalChargeTousProfils;
+                        // Total planifié TOUTES ANNÉES pour ce profil
+                        var pid = r.DbRowId ?? 0;
+                        if (pid > 0)
+                        {
+                            foreach (var kv in _jhAllYears)
+                                if (kv.Key.profilId == pid)
+                                    totalPlanifieTousProfilsToutesAnnees += kv.Value;
+                        }
+                    }
+
+                    // Ecart global = planifié (toutes années) - charge totale
+                    decimal totalEcartTousProfils = totalPlanifieTousProfilsToutesAnnees - totalChargeTousProfils;
+
 
                 <div class="table-responsive">
                     <table class="table table-sm align-middle">
@@ -1841,17 +2381,18 @@ else if (activeTab == "planning")
                                     var chargeProfil = row.ChargeJh ?? 0m;
                                     var pid = row.DbRowId ?? 0;
 
-                                    decimal sommeMoisAnnee = 0m;
+                                    // Planifié TOUTES ANNÉES pour ce profil
+                                    decimal planifieToutesAnnees = 0m;
                                     if (pid > 0)
                                     {
-                                        for (int m = 1; m <= 12; m++)
-                                        {
-                                            if (_jhAllYears.TryGetValue((pid, currentYear, m), out var v))
-                                                sommeMoisAnnee += v;
-                                        }
+                                        foreach (var kv in _jhAllYears)
+                                            if (kv.Key.profilId == pid)
+                                                planifieToutesAnnees += kv.Value;
                                     }
 
-                                    var ecart = sommeMoisAnnee - chargeProfil;
+                                    // Ecart = planifié (toutes années) - charge cible
+                                    var ecart = planifieToutesAnnees - chargeProfil;
+
 
 
 

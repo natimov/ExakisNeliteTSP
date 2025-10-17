@@ -21,6 +21,8 @@ namespace ExakisNeliteTSP.Data
         public DbSet<FraisItem> FraisItem => Set<FraisItem>();
         public DbSet<EcheancierItem> EcheancierItem => Set<EcheancierItem>();
 
+        public DbSet<WorkloadItem> WorkloadItems => Set<WorkloadItem>();
+        public DbSet<WorkloadAllocation> WorkloadAllocations => Set<WorkloadAllocation>();
 
 
 
@@ -320,6 +322,40 @@ namespace ExakisNeliteTSP.Data
                 e.Ignore(x => x.FAE);
             });
 
+            b.Entity<WorkloadItem>(e =>
+            {
+                e.HasKey(x => x.Id);
+
+                e.Property(x => x.Lot).HasMaxLength(200);
+                e.Property(x => x.Phase).HasMaxLength(100);
+                e.Property(x => x.Etape).HasMaxLength(150);
+                e.Property(x => x.Tache).HasMaxLength(1000);
+                e.Property(x => x.Livrable).HasMaxLength(1000);
+                e.Property(x => x.Commentaire).HasMaxLength(2000);
+
+                e.HasIndex(x => new { x.ProjectId, x.OrderIndex });
+
+                // Hiérarchie parent -> enfants
+                e.HasOne<WorkloadItem>()
+                 .WithMany()
+                 .HasForeignKey(x => x.ParentId)
+                 .OnDelete(DeleteBehavior.Restrict); // garde le contrôle côté code pour supprimer le bloc
+            });
+
+            b.Entity<WorkloadAllocation>(e =>
+            {
+                e.HasKey(x => x.Id);
+
+                // Une allocation par (ligne, profil)
+                e.HasIndex(x => new { x.WorkloadItemId, x.ProfileId }).IsUnique();
+
+                e.Property(x => x.JoursHomme).HasColumnType("decimal(10,2)");
+
+                e.HasOne(x => x.WorkloadItem)
+                 .WithMany(p => p.Allocations)
+                 .HasForeignKey(x => x.WorkloadItemId)
+                 .OnDelete(DeleteBehavior.Cascade);
+            });
 
 
 

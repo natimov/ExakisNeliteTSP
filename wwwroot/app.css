@@ -161,3 +161,132 @@ table.fae-table.table-sm tbody td {
     padding-bottom: .95rem !important;
 }
 
+
+
+/* ===== Workload header — bandes colorées façon Excel (global, ciblé par .wl-table) ===== */
+
+/* Base header */
+.wl-table thead th {
+    vertical-align: middle;
+    border-bottom: 2px solid #dee2e6 !important;
+    white-space: nowrap;
+    padding-top: .5rem;
+    padding-bottom: .5rem;
+}
+
+/* Ligne 1 : groupes */
+.wl-table thead tr.wl-head-group th {
+    background: #dfe7fd !important; /* bande groupe */
+    font-weight: 700;
+}
+
+/* Ligne 2 : sous-colonnes (par zone) */
+.wl-table thead .wl-head-structure {
+    background: #e8f0fe !important;
+    font-weight: 600;
+}
+/* ID/Lot/Phase/Étape/Tâche */
+.wl-table thead .wl-head-total {
+    background: #e3f2fd !important;
+    font-weight: 600;
+}
+/* SOUS TOTAL */
+.wl-table thead .wl-head-profil-jh {
+    background: #e8f5e9 !important;
+    font-weight: 600;
+}
+/* Charge par profil (JH) */
+.wl-table thead .wl-head-profil-eu {
+    background: #f1f8e9 !important;
+    font-weight: 600;
+}
+/* Valorisation par profil (€) */
+.wl-table thead .wl-head-comment {
+    background: #ede7f6 !important;
+    font-weight: 600;
+}
+/* Livrable/Commentaire */
+
+/* Ligne 3 : bandeau SOUS-TOTAL visibles */
+.wl-table thead tr.wl-subtotalbar th {
+    background: #f8fafc !important;
+    font-weight: 600;
+    border-top: 2px solid #cbd5e1 !important;
+}
+
+/* Séparateurs de blocs pour lisibilité */
+.wl-table .wl-sep-right {
+    border-right: 3px solid #cbd5e1 !important;
+}
+
+.wl-table .wl-sep-left {
+    border-left: 3px solid #cbd5e1 !important;
+}
+
+/* Détail */
+.wl-table thead small {
+    font-weight: 500;
+    opacity: .8;
+}
+
+
+/*Lignes de couleurs*/
+/* ==== Couleurs par PHASE (lignes du tbody) ==== */
+.wl-ph-pilotage {
+    background-color: #e3f2fd;
+}
+/* bleu clair */
+.wl-ph-conception {
+    background-color: #e0f7fa;
+}
+/* cyan très clair */
+.wl-ph-construction {
+    background-color: #e8f5e9;
+}
+/* vert très clair */
+.wl-ph-validation {
+    background-color: #fff9c4;
+}
+/* jaune très clair */
+.wl-ph-finalisation {
+    background-color: #ffe0b2;
+}
+/* pêche très clair */
+.wl-ph-garantie {
+    background-color: #f3e5f5;
+}
+/* violet très clair */
+.wl-ph-tma {
+    background-color: #fce4ec;
+}
+/* rose très clair */
+.wl-ph-provision {
+    background-color: #eeeeee;
+}
+/* gris clair */
+
+/* parent = un peu plus “fort” visuellement */
+.wl-parent > td {
+    font-weight: 600;
+}
+
+/* inputs lisibles sur fond coloré */
+.wl-table tbody tr[class^="wl-ph-"] input,
+.wl-table tbody tr[class*=" wl-ph-"] input {
+    background-color: transparent;
+}
+/* Parent toujours bleu (plus foncé) */
+.wl-table tbody tr.wl-parent > td {
+    background-color: #6495ED !important; /* bleu style Bootstrap .table-primary */
+    font-weight: 600;
+}
+
+/* Option: un peu plus de contraste au survol */
+.wl-table tbody tr.wl-parent:hover > td {
+    background-color: #bdd6ff !important;
+}
+
+/* Inputs lisibles sur fond parent bleu */
+.wl-table tbody tr.wl-parent input {
+    background-color: transparent;
+}

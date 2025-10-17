@@ -34,7 +34,7 @@ namespace ExakisNeliteTSP.Models
                 ? (MontantRevente - TotalCout) / MontantRevente
                 : null;
 
-        [MaxLength(512)]
+        [MaxLength(820)]
         public string? Commentaire { get; set; }
     }
 }
