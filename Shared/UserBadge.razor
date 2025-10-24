@@ -1,40 +1,59 @@
-﻿@using System.Security.Claims
+﻿@inherits LayoutComponentBase
 @using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+@inject AuthenticationStateProvider Auth
 
-<div class="d-flex align-items-center gap-2" title="@displayName">
-    <span class="rounded-circle d-inline-flex align-items-center justify-content-center
-                 bg-primary text-white"
-          style="width:32px;height:32px;">
-        <!-- Icône toujours visible, avec Bootstrap Icons -->
-        <i class="bi bi-person" style="font-size:1.1rem; line-height:1;"></i>
-    </span>
-    <span class="fw-medium">@displayName</span>
-</div>
+<CascadingAuthenticationState>
+  <div class="page">
+    <div class="sidebar">
+      <NavMenu />
+    </div>
+
+    <main>
+      <div class="top-row px-4 d-flex align-items-center justify-content-end">
+        @if (!string.IsNullOrWhiteSpace(_display))
+        {
+          <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-person-circle" style="font-size:1.3rem;"></i>
+            <span class="fw-medium">@_display</span>
+          </div>
+        }
+      </div>
+
+      <article class="content px-4">
+        @Body
+      </article>
+    </main>
+  </div>
+</CascadingAuthenticationState>
 
 @code {
-    [CascadingParameter] public Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+  private string? _display;
 
-    private string displayName = "timothee.nenin@exakis-nelite.com";
+  protected override async Task OnInitializedAsync()
+  {
+    // 1) Récupère l'état d'auth depuis le provider (hérité via CascadingAuthenticationState)
+    var state = await Auth.GetAuthenticationStateAsync();
+    var user = state.User;
 
-    protected override async Task OnParametersSetAsync()
+    if (user.Identity?.IsAuthenticated == true)
     {
-        if (AuthenticationStateTask is null) return;
+      // 2) Nom prioritaire…
+      var name = user.FindFirst(ClaimTypes.Name)?.Value
+                 ?? user.FindFirst("name")?.Value;
 
-        var user = (await AuthenticationStateTask).User;
+      // 3) …sinon e-mail (toutes variantes courantes Easy Auth)
+      var email = user.FindFirst(ClaimTypes.Email)?.Value
+               ?? user.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress")?.Value
+               ?? user.FindFirst("preferred_username")?.Value
+               ?? user.FindFirst("upn")?.Value
+               ?? user.Identity?.Name;
 
-        if (user?.Identity?.IsAuthenticated == true)
-        {
-            displayName =
-                user.FindFirst("name")?.Value ??
-                user.FindFirst(ClaimTypes.Name)?.Value ??
-                user.Identity?.Name ??
-                user.FindFirst("preferred_username")?.Value ??
-                user.FindFirst(ClaimTypes.Email)?.Value ??
-                "Utilisateur";
-        }
-        else
-        {
-            displayName = "Non connecté";
-        }
+      _display = !string.IsNullOrWhiteSpace(name) ? name : (email ?? "Utilisateur");
     }
+    else
+    {
+      _display = "Utilisateur";
+    }
+  }
 }

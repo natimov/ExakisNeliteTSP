@@ -14,10 +14,11 @@
 @inject IProjectFraisService FraisSvc
 @inject ExakisNeliteTSP.Services.Interface.IProjectEcheancierService EcheancierSvc
 @inject IWorkloadService WorkloadService
+@using Microsoft.AspNetCore.Components.Authorization
 
 
 
-
+<CascadingAuthenticationState>
 
 
 
@@ -2741,3 +2742,6 @@ else if (activeTab == "planning")
 
     
 }
+
+
+</CascadingAuthenticationState>

@@ -1,7 +1,12 @@
 ﻿@using System.Globalization
 @using ExakisNeliteTSP.Models
 @using System.Linq
+@using Microsoft.AspNetCore.Components.Authorization
 
+
+
+
+<CascadingAuthenticationState>
 
 <div class="card shadow-sm">
     <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
@@ -239,3 +244,4 @@
     // Générateur de tableau de référence (tu l’appelles déjà dans le parent)
     [Parameter] public Func<string, string, string[], RenderFragment> RenderRefTableSimple { get; set; } = default!;
 }
+</CascadingAuthenticationState>
