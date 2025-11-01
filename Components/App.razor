@@ -12,10 +12,11 @@
     <link rel="stylesheet" href="ExakisNeliteTSP.styles.css" />
 
     <!-- 3️⃣ Ton CSS global - Doit toujours être le dernier -->
-    <link rel="stylesheet" href="app.css" />
 
     <link rel="icon" type="image/png" href="faviacon.png" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+    <link rel="stylesheet" href="app.css" />
+    <link rel="stylesheet" href="kpiCards.css">
 
     <HeadOutlet />
 </head>
@@ -27,6 +28,9 @@
         <Routes @rendermode="InteractiveServer" />
     </CascadingAuthenticationState>
 
+    <script src="js/ScrollToTop.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js"></script>
+    <script src="js/ChartHelper.js"></script>
     <script src="_framework/blazor.web.js"></script>
 </body>
 </html>

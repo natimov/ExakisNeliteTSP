@@ -5,112 +5,178 @@
 @inject IConsultantDirectoryService Directory
 @using ExakisNeliteTSP.Components
 @inject IAbsenceService Absences
+@inject IJSRuntime JS
+@inject NavigationManager NavManager
+@using Microsoft.JSInterop
 
-
-
-<h3 class="mb-1">Dashboard</h3>
-<div class="text-muted mb-3">Vue d’ensemble des projets et activités</div>
-
-<div class="row g-3 mb-3">
-  <KpiCard Title="Projets en cours"         Value="@inProgress" />
-    <KpiCard Title="En attente de signature" Value="@ValidationPending" />
-    <KpiCard Title="Consultants actifs" Value="@activeConsultants" />
-  
-
-  <KpiCard Title="Consultants en inter-contrat" Value="@benchConsultants" />
-    <KpiCard Title="Projets terminés" Value="@done" />
-    <KpiCard Title="En attente de validation" Value="@inReview" />
-
-    <KpiCard Title="Projets en brouillon" Value="@draft" />
-
-  <KpiCard Title="Consultants absents" Value="@absentConsultants" />
-
-
+<div class="buttons">
+    <a class="seeAllProjects" href="/projets">Voir tous les projets</a>
+    <button class="newProject" @onclick="() => showNew = true">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+            <path d="M8 1v14M1 8h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+        </svg>
+        Nouveau projet
+    </button>
 </div>
 
-<div class="d-flex align-items-center justify-content-between mt-3">
-    <h5 class="mb-0">Projets récents</h5>
-    <div class="d-flex gap-2">
-        <a class="btn btn-outline-primary" href="/projets">Voir tous les projets</a>
-        <button class="btn btn-primary" @onclick="() => showNew = true">+ Nouveau projet</button>
+<!----------------------------------->
+<!--------     KPI cards     -------->
+<!----------------------------------->
+
+<div class="kpi-cards">
+    <div class="wrapper">
+        <div class="cols">
+            <KpiCard Title="Projets en cours"
+                     Value="@inProgress"
+                     BackText="Voir tous les projets en cours"
+                     Color="#00b9ff"
+                     BackColor="#00b9ff"
+                     NavigateUrl="/projets?status=InProgress" />
+
+            <KpiCard Title="Projets terminés"
+                     Value="@done"
+                     BackText="Voir tous les projets terminés"
+                     Color="#009b3a"
+                     BackColor="#009b3a"
+                     NavigateUrl="/projets?status=Done" />
+
+            <KpiCard Title="Brouillons"
+                     Value="@draft"
+                     BackText="Voir tous les brouillons"
+                     Color="#b2b4b3"
+                     BackColor="#b2b4b3"
+                     NavigateUrl="/projets?status=Draft" />
+        </div>
     </div>
 </div>
 
 
-<table class="table mt-2">
-    <thead>
-        <tr>
-            <th>Projet</th>
-            <th>Statut</th>
-            <th>Chef de projet</th>
-            <th>Complexité</th>
-            <th>Début</th>
-            <th>Fin prévue</th>
-            <th>Dernière MAJ</th>
-            <th></th>
-        </tr>
-    </thead>
+<!----------------------------------->
+<!-- Canvas && carte notifications -->
+<!----------------------------------->
 
-  <tbody>
-    @foreach (var p in filtered)
-    {
-            <tr>
-                <td>
-                    <strong>@p.Title</strong>
-                    <div class="text-muted small">@p.Client</div>
-                </td>
-                <td>@StatusWithPhase(p.Status, p.Phase)</td>
-                <td>@p.ProjectLead</td>
-                <td>@Label(p.Complexity)</td>
-                <td>@(p.StartDate?.ToString("dd/MM/yyyy"))</td>
-                <td>@(p.DueDate?.ToString("dd/MM/yyyy"))</td>
-                <td>@p.LastUpdated.ToLocalTime().ToString("dd/MM/yyyy")</td>
-                <td><a class="btn btn-sm btn-outline-primary" href="@($"/TSProjet/{p.Id}")">Ouvrir ↗</a></td>
-            </tr>
+<div class="dashboard-section">
+    <div class="chart-card">
+        <div class="chart-area">
+            <h4 class="chart-title">Projets par phase</h4>
+            <canvas id="projectChart"></canvas>
+        </div>
+    </div>
 
-    }
-  </tbody>
-</table>
+    <!-- Carte des notifications -->
+    <div class="notifications-card">
+        <h4>Notifications</h4>
+        <ul>
+            <li><img class="warning" src="Warning.png" width="35" />Projet A terminé</li>
+            <li><img class="warning" src="Warning.png" width="35" />Projet B en retard</li>
+            <li><img class="warning" src="Warning.png" width="35" />Projet C : Dépassement de budget</li>
+            <li><img class="warning" src="Warning.png" width="35" />Projet D : Échéance proche</li>
+        </ul>
+    </div>
+</div>
+
+<!--------------------------------->
+<!-- Tableau des projets récents -->
+<!--------------------------------->
+
+<div class="recent-projects-card">
+    <h3 class="mb-0">Projets récents</h3>
+    <div class="d-flex align-items-center justify-content-between mt-3">
+
+        <table class="recent-projects-table mt-2">
+            <thead>
+                <tr>
+                    <th>Projet</th>
+                    <th>Statut</th>
+                    <th>Chef de projet</th>
+                    <th>Complexité</th>
+                    <th>Début</th>
+                    <th>Fin prévue</th>
+                    <th>Dernière MAJ</th>
+                    <th></th>
+                </tr>
+            </thead>
+
+            <tbody>
+                @foreach (var p in filtered)
+                {
+                    <tr>
+                        <td>
+                            <strong>@p.Title</strong>
+                            <div class="text-muted small">@p.Client</div>
+                        </td>
+                        <td>@StatusWithPhase(p.Status, p.Phase)</td>
+                        <td>@p.ProjectLead</td>
+                        <td>@Label(p.Complexity)</td>
+                        <td>@(p.StartDate?.ToString("dd/MM/yyyy"))</td>
+                        <td>@(p.DueDate?.ToString("dd/MM/yyyy"))</td>
+                        <td>@p.LastUpdated.ToLocalTime().ToString("dd/MM/yyyy")</td>
+                        <td><a href="@($"/TSProjet/{p.Id}")"><img src="Voir.png" class="eye-icon" alt="Voir" /></a></td>
+                    </tr>
+
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+
+<!--------------------------------->
+<!----  Modal nouveau projet   ---->
+<!--------------------------------->
 
 <NewProjectModal @bind-Visible="showNew"
                  OnCreated="Refresh" />
 
+
+<!--------------------------------->
+<!----          Code           ---->
+<!--------------------------------->
 @code {
     private int benchConsultants;
     private int ValidationPending;
     private int absentConsultants;
-    private int draft; 
+    private int draft;
 
 
 
-  private List<Project> projects = new();
-  private List<Project> filtered = new();
-  private int inProgress, inReview, done, activeConsultants;
-  private bool showNew;
-  private string? search;
-  private string? statusFilter;
+    // Liste des projets et projets filtrés
+    private List<Project> projects = new();
+    private List<Project> filtered = new();
 
-  protected override async Task OnInitializedAsync() => await Refresh();
+    // Filtre sélectionné
+ 
 
-  private async Task Refresh()
-  {
-    projects = await Projects.GetAllAsync();
-    inProgress = await Projects.CountByStatusAsync(ProjectStatus.InProgress);
-    inReview   = await Projects.CountByStatusAsync(ProjectStatus.InReview);
-    done       = await Projects.CountByStatusAsync(ProjectStatus.Done);
-    activeConsultants = await Projects.CountActiveConsultantsAsync();
-    draft = await Projects.CountByStatusAsync(ProjectStatus.Draft);
-    ValidationPending = await Projects.CountByStatusAsync(ProjectStatus.ValidationPending);
+    private int inProgress, inReview, done, activeConsultants;
+    private bool showNew;
+    private string? search;
+    private string? statusFilter;
 
 
-    ApplyFilters();
+    // Chargement des données au démarrage
+    protected override async Task OnInitializedAsync()
+    {
+        await Refresh(); // Charger les projets et appliquer le filtre
+    }
+
+    private async Task Refresh()
+    {
+        projects = await Projects.GetAllAsync();
+        inProgress = await Projects.CountByStatusAsync(ProjectStatus.InProgress);
+        inReview = await Projects.CountByStatusAsync(ProjectStatus.InReview);
+        done = await Projects.CountByStatusAsync(ProjectStatus.Done);
+        draft = await Projects.CountByStatusAsync(ProjectStatus.Draft);
+        ValidationPending = await Projects.CountByStatusAsync(ProjectStatus.ValidationPending);
+        activeConsultants = await Projects.CountActiveConsultantsAsync();
+
+        // Calculer les consultants absents et en bench
         var totalConsultants = await Directory.GetAllConsultantsAsync();
         var total = totalConsultants.Count;
         benchConsultants = Math.Max(0, total - activeConsultants - absentConsultants);
 
         try
         {
-            var today = DateOnly.FromDateTime(DateTime.UtcNow); // ou DateTime.Now si tu préfères
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
             var abs = await Absences.GetAbsentConsultantsAsync(today);
             absentConsultants = abs
                 .Where(n => !string.IsNullOrWhiteSpace(n))
@@ -120,11 +186,13 @@
         }
         catch
         {
-            absentConsultants = 0; // en cas d'erreur, on n’empêche pas l’UI de s’afficher
+            absentConsultants = 0;
         }
 
+        ApplyFilters();
+    }
 
-  }
+    // Étiquette de complexité
     private static string Label(Complexity c) => c switch
     {
         Complexity.Simple => "Simple",
@@ -133,52 +201,69 @@
         _ => c.ToString()
     };
 
-    private const int HomeTopCount = 8; // configurable
+    // Nombre de projets à afficher sur la page d'accueil
+    private const int HomeTopCount = 8;
 
+    // Appliquer les filtres aux projets
     private void ApplyFilters()
     {
-        filtered = projects
+        var query = projects.AsEnumerable();
+
+        // Tri et limitation pour la page d'accueil
+        filtered = query
             .OrderByDescending(p => p.LastUpdated)
             .Take(HomeTopCount)
             .ToList();
-        // StateHasChanged(); // inutile ici
+
+        // KPI
+        inProgress = query.Count(p => p.Status == ProjectStatus.InProgress);
+        inReview = query.Count(p => p.Status == ProjectStatus.InReview);
+        done = query.Count(p => p.Status == ProjectStatus.Done);
+        draft = query.Count(p => p.Status == ProjectStatus.Draft);
+        ValidationPending = query.Count(p => p.Status == ProjectStatus.ValidationPending);
+
+        _ = RefreshChartAsync(query.ToList());
     }
 
- 
 
-  private void ClearFilters()
-  {
-    search = statusFilter = null;
-    ApplyFilters();
-  }
+    // Réinitialiser les filtres
+    private void ClearFilters()
+    {
+        search = statusFilter = null;
+        ApplyFilters();
+    }
 
-  // Libellés FR d'affichage des statuts (sans toucher aux noms techniques de l'énum)
-  private static string Label(ProjectStatus s) => s switch
-  {
-    ProjectStatus.Draft => "Brouillon",
-    ProjectStatus.InProgress => "En cours",
-    ProjectStatus.InReview   => "En attente de validation",
-    ProjectStatus.Done       => "Terminé",
-    ProjectStatus.ValidationPending   => "En attente de singature",
-    ProjectStatus.OnHold     => "En pause",
-    _                        => s.ToString()
-  };
-
-  private RenderFragment Badge(ProjectStatus s) => builder =>
-  {
-    var cls = s switch {
-      ProjectStatus.InProgress => "badge bg-primary",
-      ProjectStatus.InReview   => "badge bg-warning text-dark",
-      ProjectStatus.Done       => "badge bg-success",
-      ProjectStatus.ValidationPending   => "badge bg-info",
-      ProjectStatus.OnHold     => "badge bg-secondary",
-      _                        => "badge bg-light text-dark"
+    // Étiquette de statut
+    private static string Label(ProjectStatus s) => s switch
+    {
+        ProjectStatus.Draft => "Brouillon",
+        ProjectStatus.InProgress => "En cours",
+        ProjectStatus.InReview => "En attente de validation",
+        ProjectStatus.Done => "Terminé",
+        ProjectStatus.ValidationPending => "En attente de singature",
+        ProjectStatus.OnHold => "En pause",
+        _ => s.ToString()
     };
-    builder.OpenElement(0, "span");
-    builder.AddAttribute(1, "class", cls);
-    builder.AddContent(2, Label(s)); // affiche le libellé FR
-    builder.CloseElement();
-  };
+
+    // Badge de statut
+    private RenderFragment Badge(ProjectStatus s) => builder =>
+    {
+        var cls = s switch
+        {
+            ProjectStatus.InProgress => "badge bg-primary ms-1",
+            ProjectStatus.InReview => "badge bg-warning text-dark",
+            ProjectStatus.Done => "badge bg-success",
+            ProjectStatus.ValidationPending => "badge bg-info",
+            ProjectStatus.OnHold => "badge bg-secondary",
+            _ => "badge bg-light text-dark"
+        };
+        builder.OpenElement(0, "span");
+        builder.AddAttribute(1, "class", cls);
+        builder.AddContent(2, Label(s));
+        builder.CloseElement();
+    };
+
+    // Étiquette de phase
     private static string Label(ProjectPhase ph) => ph switch
     {
         ProjectPhase.None => "—",
@@ -192,32 +277,132 @@
         ProjectPhase.Provision => "Provision",
         _ => ph.ToString()
     };
+
+    // Badge de statut avec phase
     private RenderFragment StatusWithPhase(ProjectStatus s, ProjectPhase? ph) => builder =>
-{
-    // badge statut (comme avant)
-    var cls = s switch
     {
-        ProjectStatus.InProgress => "badge bg-primary",
-        ProjectStatus.InReview => "badge bg-warning text-dark",
-        ProjectStatus.ValidationPending => "badge bg-info",
-        ProjectStatus.Done => "badge bg-success",
-        ProjectStatus.OnHold => "badge bg-secondary",
-        _ => "badge bg-light text-dark"
-    };
-    builder.OpenElement(0, "span");
-    builder.AddAttribute(1, "class", cls);
-    builder.AddContent(2, Label(s));
-    builder.CloseElement();
+        int seq = 0;
 
-    // si "En cours" + phase, on ajoute un 2e badge bleu, à droite
-    if (s == ProjectStatus.InProgress && ph is ProjectPhase p && p != ProjectPhase.None)
-    {
-        builder.OpenElement(3, "span");
-        builder.AddAttribute(4, "class", "badge bg-primary ms-1"); // même bleu + petit espace
-        builder.AddContent(5, Label(p));
+        // Switch pour déterminer la classe CSS du badge de statut
+        var cls = s switch
+        {
+            ProjectStatus.InProgress => "badge bg-primary ms-1",
+            ProjectStatus.InReview => "badge bg-warning text-dark ms-1",
+            ProjectStatus.ValidationPending => "badge bg-info ms-1",
+            ProjectStatus.Done => "badge bg-success ms-1",
+            ProjectStatus.OnHold => "badge bg-secondary ms-1",
+            ProjectStatus.Draft => "badge bg-light text-dark ms-1",
+            _ => "badge bg-light text-dark ms-1"
+        };
+
+        builder.OpenElement(seq++, "span");
+        builder.AddAttribute(seq++, "class", cls);
+        builder.AddContent(seq++, Label(s));
         builder.CloseElement();
+
+        if (ph is ProjectPhase p && p != ProjectPhase.None)
+        {
+            var phaseClass = p switch
+            {
+                ProjectPhase.Pilotage => "badge phase-pilotage ms-1",
+                ProjectPhase.Conception => "badge phase-conception ms-1",
+                ProjectPhase.Construction => "badge phase-construction ms-1",
+                ProjectPhase.Validation => "badge phase-validation ms-1",
+                ProjectPhase.Finalisation => "badge phase-finalisation ms-1",
+                ProjectPhase.Garantie => "badge phase-garantie ms-1",
+                ProjectPhase.TMA => "badge phase-tma ms-1",
+                ProjectPhase.Provision => "badge phase-provision ms-1",
+                _ => "badge bg-secondary ms-1"
+            };
+
+            builder.OpenElement(seq++, "span");
+            builder.AddAttribute(seq++, "class", phaseClass);
+            builder.AddContent(seq++, Label(p));
+            builder.CloseElement();
+        }
+    };
+
+
+    // Référence pour les appels JS interop
+    private DotNetObjectReference<Home>? objRef;
+
+    // Initialisation du graphique après le rendu
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Initialisation du graphique Chart.js
+        if (firstRender)
+        {
+            // Créer la référence pour les appels JS
+            objRef = DotNetObjectReference.Create(this);
+
+            // Initialiser le graphique via JS interop
+            try
+            {
+                await JS.InvokeVoidAsync("initProjectChart", objRef);
+                await RefreshChartAsync();
+            }
+            // Gestion des erreurs JS interop
+            catch (Exception ex)
+            {
+                Console.WriteLine("Erreur Chart.js: " + ex.Message);
+            }
+        }
     }
-};
+
+    // Rafraîchir les données du graphique
+    private async Task RefreshChartAsync(List<Project>? projectsToUse = null)
+    {
+        var source = projectsToUse ?? projects;
+
+        var grouped = source
+            .Where(p => p.Phase is not null && p.Phase != ProjectPhase.None)
+            .GroupBy(p => p.Phase!.Value)
+            .Select(g => new PhaseCount { Phase = Label(g.Key), Count = g.Count() })
+            .OrderBy(g => g.Phase)
+            .ToList();
+
+        if (grouped.Count == 0)
+        {
+            grouped = new List<PhaseCount> { new PhaseCount { Phase = "Aucune donnée", Count = 0 } };
+        }
+
+        var labels = grouped.Select(g => g.Phase).ToArray();
+        var values = grouped.Select(g => g.Count).ToArray();
+
+        await JS.InvokeVoidAsync("updateProjectChart", labels, values);
+    }
 
 
+    // Classe pour stocker le comptage par phase
+    private class PhaseCount
+    {
+        public string Phase { get; set; } = "";
+        public int Count { get; set; }
+    }
+
+    // Méthode appelée depuis JS lors du clic sur une barre du graphique
+    [JSInvokable]
+    // Naviguer vers la page Projets avec le filtre de phase
+    public void NavigateToProjects(string phase)
+    {
+        // Si une phase est spécifiée, naviguer vers la page Projets avec le filtre
+        if (!string.IsNullOrEmpty(phase))
+        {
+            NavManager.NavigateTo($"/projets?phase={Uri.EscapeDataString(phase)}");
+        }
+    }
+    // Nettoyage
+    public void Dispose()
+    {
+        // Libérer la référence JS
+        objRef?.Dispose();
+    }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "serviceLine")]
+    public string? ServiceLineFilter { get; set; }
+
+    
 }
+
+

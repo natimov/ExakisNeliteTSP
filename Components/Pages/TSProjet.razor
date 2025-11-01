@@ -15,6 +15,7 @@
 @inject ExakisNeliteTSP.Services.Interface.IProjectEcheancierService EcheancierSvc
 @inject IWorkloadService WorkloadService
 @using Microsoft.AspNetCore.Components.Authorization
+@using ExakisNeliteTSP.Services
 
 
 
@@ -377,6 +378,8 @@
 
                 // 7) Recalculs d’affichage
                 ProfilComputeService.ComputeAll(project);
+                    RebuildSynthese();
+
                 var map = FaeBuildCoutEngageCumul();
 
                 // (Logs de debug optionnels)
@@ -681,6 +684,8 @@ private Task GoPrevYearAsync() => ChangeYearAsync(-1);
             // (optionnel) recharger depuis la BDD pour être pile-poil aligné
             project.Profils = await ProfilRowsSvc.LoadProfilEntriesAsync(project.Id);
             ProfilComputeService.ComputeAll(project);
+                RebuildSynthese();
+
         }
         catch (Exception ex)
         {
@@ -765,6 +770,8 @@ private async Task SavePlanningAsync(int? year = null)
         if (project is null) return;
         await AchatSvc.SaveAsync(project.Id, achatItem);
         achatItem = await AchatSvc.LoadAsync(project.Id); // recharge propre
+            RebuildSynthese();
+
     }
 
     private void AddAchatRow()
@@ -833,6 +840,8 @@ private async Task SavePlanningAsync(int? year = null)
     {
         if (project is null) return;
         await FraisSvc.SaveAsync(project.Id, frais);
+            RebuildSynthese();
+
     }
 
     private async Task DeleteFraisAsync(FraisItem row)
@@ -928,19 +937,20 @@ private async Task SavePlanningAsync(int? year = null)
                         }
         </tbody>
     </table>
-</div>;
+</div>
+        ;
 private List<AchatPrestataireItem> prestas = new();
 
 private async Task LoadPrestasAsync()
 {
-    if (project is null) return;
-    prestas = await PrestasSvc.LoadAsync(project.Id);
+        if (project is null) return;
+        prestas = await PrestasSvc.LoadAsync(project.Id);
 }
 
 private void AddPrestaRow()
 {
-    if (project is null) return;
-    prestas.Add(new AchatPrestataireItem
+        if (project is null) return;
+        prestas.Add(new AchatPrestataireItem
     {
         ProjectId = project.Id,
         Societe = "",
@@ -953,23 +963,23 @@ private void AddPrestaRow()
 
 private async Task SavePrestasAsync()
 {
-    if (project is null) return;
-    await PrestasSvc.SaveAsync(project.Id, prestas);
-    // Optionnel : recharger pour resynchroniser avec la BDD
-    // prestas = await PrestasSvc.LoadAsync(project.Id);
+        if (project is null) return;
+        await PrestasSvc.SaveAsync(project.Id, prestas);
+        // Optionnel : recharger pour resynchroniser avec la BDD
+        // prestas = await PrestasSvc.LoadAsync(project.Id);
 }
 
 private async Task DeletePrestaAsync(AchatPrestataireItem row)
 {
-    if (row.Id == 0)
-    {
-        prestas.Remove(row);
-    }
-    else
-    {
-        await PrestasSvc.DeleteAsync(row.Id);
-        prestas.Remove(row);
-    }
+        if (row.Id == 0)
+        {
+            prestas.Remove(row);
+        }
+        else
+        {
+            await PrestasSvc.DeleteAsync(row.Id);
+            prestas.Remove(row);
+        }
 }
 
 // ==============WORLOAD=================//
@@ -982,69 +992,69 @@ private string? saveError;
 
 private async Task SaveWorkloadAsync()
 {
-    if (project is null) return;
-    // 0) d’abord, on supprime en base ce que l’utilisateur a retiré
-    if (wlDeleted.Count > 0)
-    {
-        await WorkloadService.DeleteRowsAsync(wlDeleted);
-        wlDeleted.Clear(); // on vide la liste, c’est fait
-    }
+        if (project is null) return;
+        // 0) d’abord, on supprime en base ce que l’utilisateur a retiré
+        if (wlDeleted.Count > 0)
+        {
+            await WorkloadService.DeleteRowsAsync(wlDeleted);
+            wlDeleted.Clear(); // on vide la liste, c’est fait
+        }
 
 
-    // --- Parents : ne pas persister Phase / Étape ---
-    foreach (var row in wlRows.Where(x => x.ParentId is null))
-    {
-        row.Phase = string.Empty;   // ou: null si colonne nullable
-        row.Etape = string.Empty;   // ou: null si colonne nullable
-    }
+        // --- Parents : ne pas persister Phase / Étape ---
+        foreach (var row in wlRows.Where(x => x.ParentId is null))
+        {
+            row.Phase = string.Empty;   // ou: null si colonne nullable
+            row.Etape = string.Empty;   // ou: null si colonne nullable
+        }
 
-    saving = true;
-    saveError = null;
-    StateHasChanged();
-
-    try
-    {
-        // 1) UPSERT des lignes
-        foreach (var row in wlRows)
-            await WorkloadService.UpdateRowAsync(row);
-
-        // 2) Puis les allocations JH (enfants uniquement)
-        foreach (var row in wlRows.Where(x => x.ParentId is not null))
-            foreach (var kv in row.ChargesByProfile)
-                await WorkloadService.UpdateAllocationAsync(row.Id, kv.Key, kv.Value);
-
-        // 3) Recharger depuis la BD (facultatif mais propre)
-        wlRows = await WorkloadService.LoadAsync(project.Id);
-        lastSavedAt = DateTime.Now;
-    }
-    catch (Exception ex)
-    {
-        saveError = ex.Message;
-    }
-    finally
-    {
-        saving = false;
+        saving = true;
+        saveError = null;
         StateHasChanged();
-    }
+
+        try
+        {
+            // 1) UPSERT des lignes
+            foreach (var row in wlRows)
+                await WorkloadService.UpdateRowAsync(row);
+
+            // 2) Puis les allocations JH (enfants uniquement)
+            foreach (var row in wlRows.Where(x => x.ParentId is not null))
+                foreach (var kv in row.ChargesByProfile)
+                    await WorkloadService.UpdateAllocationAsync(row.Id, kv.Key, kv.Value);
+
+            // 3) Recharger depuis la BD (facultatif mais propre)
+            wlRows = await WorkloadService.LoadAsync(project.Id);
+            lastSavedAt = DateTime.Now;
+        }
+        catch (Exception ex)
+        {
+            saveError = ex.Message;
+        }
+        finally
+        {
+            saving = false;
+            StateHasChanged();
+        }
 }
 
 // couleurs 
 private static string PhaseCss(string? phase)
 {
-    if (string.IsNullOrWhiteSpace(phase)) return string.Empty;
+        if (string.IsNullOrWhiteSpace(phase)) return string.Empty;
 
-    switch (phase.Trim().ToLowerInvariant())
-    {
-        case "pilotage": return "wl-ph-pilotage";
-        case "conception": return "wl-ph-conception";
-        case "construction": return "wl-ph-construction";
-        case "validation": return "wl-ph-validation";
-        case "finalisation": return "wl-ph-finalisation";
-        case "garantie": return "wl-ph-garantie";
-        case "tma": return "wl-ph-tma";
-        case "provision": return "wl-ph-provision";
-        default: return string.Empty;
-    }
+        switch (phase.Trim().ToLowerInvariant())
+        {
+            case "pilotage": return "wl-ph-pilotage";
+            case "conception": return "wl-ph-conception";
+            case "construction": return "wl-ph-construction";
+            case "validation": return "wl-ph-validation";
+            case "finalisation": return "wl-ph-finalisation";
+            case "garantie": return "wl-ph-garantie";
+            case "tma": return "wl-ph-tma";
+            case "provision": return "wl-ph-provision";
+            default: return string.Empty;
+        }
 }
 
 
@@ -1060,17 +1070,17 @@ private Guid? wlMenuOpenFor = null;
 // --- seed : toujours 1 grande étape vide au démarrage / après suppression totale ---
 private void EnsureSeedRow()
 {
-    if (wlRows.Count == 0)
-    {
-        wlRows.Add(new WorkloadItem
+        if (wlRows.Count == 0)
+        {
+            wlRows.Add(new WorkloadItem
         {
             Id = Guid.NewGuid(),
             ProjectId = project!.Id,
             ParentId = null,
             OrderIndex = 1
         });
-        wlSelected = wlRows[0];
-    }
+            wlSelected = wlRows[0];
+        }
 }
 
 //protected override void OnInitialized() => EnsureSeedRow();
@@ -1081,28 +1091,28 @@ private void EnsureSeedRow()
 // --- profils dynamiques (colonnes) ---
 private List<WlProfile> WlGetProfiles()
 {
-    var list = new List<WlProfile>();
-    if (project?.Profils is null) return list;
+        var list = new List<WlProfile>();
+        if (project?.Profils is null) return list;
 
-    foreach (var pr in project.Profils)
-    {
-        // on ne garde que les profils qui ont l'ID PERSISTANT en BD
-        if (pr.DbRowId is not int pid) continue;
+        foreach (var pr in project.Profils)
+        {
+            // on ne garde que les profils qui ont l'ID PERSISTANT en BD
+            if (pr.DbRowId is not int pid) continue;
 
-        // coût interne & TJM (existant dans ton code)
-        decimal coutJour = (pr.Prcs ?? pr.Cjm ?? 0m);
-        if (pr.Entite == EntiteType.CESSION)
-            coutJour += (pr.FraisDeplacementSiCession ?? 0m);
+            // coût interne & TJM (existant dans ton code)
+            decimal coutJour = (pr.Prcs ?? pr.Cjm ?? 0m);
+            if (pr.Entite == EntiteType.CESSION)
+                coutJour += (pr.FraisDeplacementSiCession ?? 0m);
 
-        decimal tjm = pr.Tjm ?? coutJour;
-        string name = string.IsNullOrWhiteSpace(pr.Profil) ? $"Profil {pid}" : pr.Profil;
+            decimal tjm = pr.Tjm ?? coutJour;
+            string name = string.IsNullOrWhiteSpace(pr.Profil) ? $"Profil {pid}" : pr.Profil;
 
-        // ⚠️ on fixe bien l'ID utilisé par la BD (pid)
-        list.Add(new WlProfile(pid, name, coutJour, tjm));
+            // ⚠️ on fixe bien l'ID utilisé par la BD (pid)
+            list.Add(new WlProfile(pid, name, coutJour, tjm));
 
-    }
+        }
 
-    return list;
+        return list;
 }
 
 
@@ -1110,86 +1120,86 @@ private List<WlProfile> WlGetProfiles()
 private IEnumerable<WorkloadItem> WlOrderedRows() => wlRows.OrderBy(x => x.OrderIndex);
 private void WlResequence()
 {
-    int i = 1;
-    foreach (var r in wlRows.OrderBy(x => x.OrderIndex))
-        r.OrderIndex = i++;
+        int i = 1;
+        foreach (var r in wlRows.OrderBy(x => x.OrderIndex))
+            r.OrderIndex = i++;
 }
 
 // --- affichage ID hiérarchique (1, 1.1…) ---
 private string WlDisplayId(WorkloadItem r)
 {
-    var parents = wlRows.Where(x => x.ParentId is null).OrderBy(x => x.OrderIndex).ToList();
+        var parents = wlRows.Where(x => x.ParentId is null).OrderBy(x => x.OrderIndex).ToList();
 
-    if (r.ParentId is null)
-    {
-        var pi = parents.FindIndex(x => x.Id == r.Id) + 1;
-        return pi.ToString();
-    }
-    else
-    {
-        var parent = wlRows.FirstOrDefault(x => x.Id == r.ParentId);
-        if (parent is null) return "?";
-        var pi = parents.FindIndex(x => x.Id == parent.Id) + 1;
+        if (r.ParentId is null)
+        {
+            var pi = parents.FindIndex(x => x.Id == r.Id) + 1;
+            return pi.ToString();
+        }
+        else
+        {
+            var parent = wlRows.FirstOrDefault(x => x.Id == r.ParentId);
+            if (parent is null) return "?";
+            var pi = parents.FindIndex(x => x.Id == parent.Id) + 1;
 
-        var children = wlRows.Where(x => x.ParentId == parent.Id).OrderBy(x => x.OrderIndex).ToList();
-        var ci = children.FindIndex(x => x.Id == r.Id) + 1;
-        return $"{pi}.{ci}";
-    }
+            var children = wlRows.Where(x => x.ParentId == parent.Id).OrderBy(x => x.OrderIndex).ToList();
+            var ci = children.FindIndex(x => x.Id == r.Id) + 1;
+            return $"{pi}.{ci}";
+        }
 }
 
 // --- actions "menu ⋮" : insérer / supprimer ---
 private async Task WlInsertParentBelowAt(WorkloadItem r){
-    int nextOrder;
-    if (r.ParentId is null)
-    {
-        // r = parent -> insérer après tout le bloc (parent + enfants)
-        int after = wlRows
-            .Where(x => x.Id == r.Id || x.ParentId == r.Id)
-            .Select(x => x.OrderIndex)
-            .DefaultIfEmpty(r.OrderIndex)
-            .Max();
-        nextOrder = after + 1;
-    }
-    else
-    {
-        // r = enfant -> insérer juste après cet enfant
-        nextOrder = r.OrderIndex + 1;
-    }
+        int nextOrder;
+        if (r.ParentId is null)
+        {
+            // r = parent -> insérer après tout le bloc (parent + enfants)
+            int after = wlRows
+                .Where(x => x.Id == r.Id || x.ParentId == r.Id)
+                .Select(x => x.OrderIndex)
+                .DefaultIfEmpty(r.OrderIndex)
+                .Max();
+            nextOrder = after + 1;
+        }
+        else
+        {
+            // r = enfant -> insérer juste après cet enfant
+            nextOrder = r.OrderIndex + 1;
+        }
 
-    foreach (var it in wlRows.Where(x => x.OrderIndex >= nextOrder))
-        it.OrderIndex++;
+        foreach (var it in wlRows.Where(x => x.OrderIndex >= nextOrder))
+            it.OrderIndex++;
 
-    var newParent = new WorkloadItem
+        var newParent = new WorkloadItem
     {
         Id = Guid.NewGuid(),
         ProjectId = project!.Id,
         ParentId = null,
         OrderIndex = nextOrder
     };
-    wlRows.Add(newParent);
+        wlRows.Add(newParent);
 
-    WlResequence();
-    EnsureSeedRow();
-    wlMenuOpenFor = null;
-    await InvokeAsync(StateHasChanged);
+        WlResequence();
+        EnsureSeedRow();
+        wlMenuOpenFor = null;
+        await InvokeAsync(StateHasChanged);
 }
 
 private async Task WlInsertChildBelowAt(WorkloadItem r)
 {
-    var parent = (r.ParentId is null) ? r : wlRows.FirstOrDefault(x => x.Id == r.ParentId);
-    if (parent is null) return;
+        var parent = (r.ParentId is null) ? r : wlRows.FirstOrDefault(x => x.Id == r.ParentId);
+        if (parent is null) return;
 
-    int nextOrder = (r.ParentId is null)
-        ? wlRows.Where(x => x.ParentId == parent.Id)
-               .Select(x => x.OrderIndex)
-               .DefaultIfEmpty(parent.OrderIndex)
-               .Max() + 1
-        : r.OrderIndex + 1;
+        int nextOrder = (r.ParentId is null)
+            ? wlRows.Where(x => x.ParentId == parent.Id)
+                   .Select(x => x.OrderIndex)
+                   .DefaultIfEmpty(parent.OrderIndex)
+                   .Max() + 1
+            : r.OrderIndex + 1;
 
-    foreach (var it in wlRows.Where(x => x.OrderIndex >= nextOrder))
-        it.OrderIndex++;
+        foreach (var it in wlRows.Where(x => x.OrderIndex >= nextOrder))
+            it.OrderIndex++;
 
-    var child = new WorkloadItem
+        var child = new WorkloadItem
     {
         Id = Guid.NewGuid(),
         ProjectId = project!.Id,
@@ -1198,108 +1208,108 @@ private async Task WlInsertChildBelowAt(WorkloadItem r)
         Lot = parent.Lot,
         GroupCode = parent.GroupCode
     };
-    wlRows.Add(child);
+        wlRows.Add(child);
 
 
-    WlResequence();
-    EnsureSeedRow();
-    wlMenuOpenFor = null;
-    await InvokeAsync(StateHasChanged);
+        WlResequence();
+        EnsureSeedRow();
+        wlMenuOpenFor = null;
+        await InvokeAsync(StateHasChanged);
 }
 
 private void WlDeleteRow(WorkloadItem r)
 {
-    // 1) L’Id à supprimer : la ligne + ses enfants si c’est un parent
-    var ids = wlRows
-        .Where(x => x.Id == r.Id || x.ParentId == r.Id)
-        .Select(x => x.Id)
-        .ToList();
+        // 1) L’Id à supprimer : la ligne + ses enfants si c’est un parent
+        var ids = wlRows
+            .Where(x => x.Id == r.Id || x.ParentId == r.Id)
+            .Select(x => x.Id)
+            .ToList();
 
-    // 2) Marquer pour suppression en BD au clic "Enregistrer"
-    foreach (var id in ids)
-        wlDeleted.Add(id);
+        // 2) Marquer pour suppression en BD au clic "Enregistrer"
+        foreach (var id in ids)
+            wlDeleted.Add(id);
 
-    // 3) Retirer immédiatement de l’UI
-    wlRows.RemoveAll(x => ids.Contains(x.Id));
+        // 3) Retirer immédiatement de l’UI
+        wlRows.RemoveAll(x => ids.Contains(x.Id));
 
-    // 4) Resequencer l’affichage si tu as une numérotation/ordre
-    WlResequence();
+        // 4) Resequencer l’affichage si tu as une numérotation/ordre
+        WlResequence();
 
-    // ⚠️ NE PAS recréer automatiquement un parent ici.
-    // EnsureSeedRow();  // <-- on supprime cette ligne pour éviter la réapparition
+        // ⚠️ NE PAS recréer automatiquement un parent ici.
+        // EnsureSeedRow();  // <-- on supprime cette ligne pour éviter la réapparition
 
-    wlMenuOpenFor = null;
-    StateHasChanged();
+        wlMenuOpenFor = null;
+        StateHasChanged();
 }
 
 
 // --- propagation Lot/GroupCode du parent vers enfants ---
 private void WlPropagateFromParent(WorkloadItem parent, bool lot = true, bool groupCode = true)
 {
-    foreach (var c in wlRows.Where(x => x.ParentId == parent.Id))
-    {
-        if (lot) c.Lot = parent.Lot;
-        if (groupCode) c.GroupCode = parent.GroupCode;
-    }
+        foreach (var c in wlRows.Where(x => x.ParentId == parent.Id))
+        {
+            if (lot) c.Lot = parent.Lot;
+            if (groupCode) c.GroupCode = parent.GroupCode;
+        }
 }
 
 // --- édition des charges par profil ---
 private Task WlUpdateAlloc(WorkloadItem r, int profileId, string? raw)
 {
-    // accepte 1,5 et 1.5
-    decimal v = 0m;
-    if (!decimal.TryParse(raw, NumberStyles.Number, CultureInfo.GetCultureInfo("fr-FR"), out v))
-        decimal.TryParse(raw, NumberStyles.Number, CultureInfo.InvariantCulture, out v);
+        // accepte 1,5 et 1.5
+        decimal v = 0m;
+        if (!decimal.TryParse(raw, NumberStyles.Number, CultureInfo.GetCultureInfo("fr-FR"), out v))
+            decimal.TryParse(raw, NumberStyles.Number, CultureInfo.InvariantCulture, out v);
 
-    if (v < 0) v = 0m;
-    r.ChargesByProfile[profileId] = v;  // MAJ en mémoire seulement
-    return Task.CompletedTask;          // PAS d'appel au service ici
+        if (v < 0) v = 0m;
+        r.ChargesByProfile[profileId] = v;  // MAJ en mémoire seulement
+        return Task.CompletedTask;          // PAS d'appel au service ici
 }
 
 // --- agrégations (JH, coûts, valorisation) ---
 private decimal WlSumCharges(WorkloadItem row, List<WlProfile> profs)
-    => profs.Sum(p => row.ChargesByProfile.TryGetValue(p.ProfileId, out var v) ? v : 0m);
+                => profs.Sum(p => row.ChargesByProfile.TryGetValue(p.ProfileId, out var v) ? v : 0m);
 
 private decimal WlSumChildrenCharges(Guid parentId, int profileId)
-    => wlRows.Where(c => c.ParentId == parentId)
-             .Sum(c => c.ChargesByProfile.TryGetValue(profileId, out var v) ? v : 0m);
+                => wlRows.Where(c => c.ParentId == parentId)
+                         .Sum(c => c.ChargesByProfile.TryGetValue(profileId, out var v) ? v : 0m);
 
 private decimal WlCostFor(WorkloadItem row, int profileId, decimal costPerDay)
 {
-    var jh = row.ChargesByProfile.TryGetValue(profileId, out var v) ? v : 0m;
-    return jh * costPerDay;
+        var jh = row.ChargesByProfile.TryGetValue(profileId, out var v) ? v : 0m;
+        return jh * costPerDay;
 }
 
 private decimal WlSumChildrenCosts(Guid parentId, int profileId, decimal costPerDay)
-    => wlRows.Where(c => c.ParentId == parentId)
-             .Sum(c => WlCostFor(c, profileId, costPerDay));
+                => wlRows.Where(c => c.ParentId == parentId)
+                         .Sum(c => WlCostFor(c, profileId, costPerDay));
 
 private decimal WlValueFor(WorkloadItem row, int profileId, decimal pricePerDay)
 {
-    var jh = row.ChargesByProfile.TryGetValue(profileId, out var v) ? v : 0m;
-    return jh * pricePerDay;
+        var jh = row.ChargesByProfile.TryGetValue(profileId, out var v) ? v : 0m;
+        return jh * pricePerDay;
 }
 
 private decimal WlSumChildrenValues(Guid parentId, int profileId, decimal pricePerDay)
-    => wlRows.Where(c => c.ParentId == parentId).Sum(c => WlValueFor(c, profileId, pricePerDay));
+                => wlRows.Where(c => c.ParentId == parentId).Sum(c => WlValueFor(c, profileId, pricePerDay));
 
 private decimal WlSumRowCosts(WorkloadItem row, List<WlProfile> profs)
-    => profs.Sum(p => WlCostFor(row, p.ProfileId, p.CostPerDay));
+                => profs.Sum(p => WlCostFor(row, p.ProfileId, p.CostPerDay));
 
 private decimal WlSumRowValues(WorkloadItem row, List<WlProfile> profs)
-    => profs.Sum(p => WlValueFor(row, p.ProfileId, p.PricePerDay));
+                => profs.Sum(p => WlValueFor(row, p.ProfileId, p.PricePerDay));
 
 // --- totaux (entête) ---
 private IEnumerable<WorkloadItem> WlLeafRows() => wlRows.Where(r => r.ParentId is not null);
 
 private decimal WlTotalChargesForProfile(int profileId)
-    => WlLeafRows().Sum(r => r.ChargesByProfile.TryGetValue(profileId, out var v) ? v : 0m);
+                => WlLeafRows().Sum(r => r.ChargesByProfile.TryGetValue(profileId, out var v) ? v : 0m);
 
 private decimal WlTotalCostsForProfile(int profileId, decimal costPerDay)
-    => WlLeafRows().Sum(r => (r.ChargesByProfile.TryGetValue(profileId, out var v) ? v : 0m) * costPerDay);
+                => WlLeafRows().Sum(r => (r.ChargesByProfile.TryGetValue(profileId, out var v) ? v : 0m) * costPerDay);
 
 private decimal WlTotalValuesForProfile(int profileId, decimal pricePerDay)
-    => WlLeafRows().Sum(r => (r.ChargesByProfile.TryGetValue(profileId, out var v) ? v : 0m) * pricePerDay);
+                => WlLeafRows().Sum(r => (r.ChargesByProfile.TryGetValue(profileId, out var v) ? v : 0m) * pricePerDay);
 
 private decimal WlGrandTotalJH() => WlLeafRows().Sum(r => r.ChargesByProfile.Values.Sum());
 private decimal WlGrandTotalCost(List<WlProfile> profs) => WlLeafRows().Sum(r => WlSumRowCosts(r, profs));
@@ -1309,15 +1319,15 @@ private decimal WlGrandTotalValue(List<WlProfile> profs) => WlLeafRows().Sum(r =
 
 // 1) Options de PHASE = toutes les valeurs de l’énum (hors None)
 private IReadOnlyList<ProjectPhase> PhaseEnumOptions =>
-    Enum.GetValues<ProjectPhase>().Where(p => p != ProjectPhase.None).ToList();
+                Enum.GetValues<ProjectPhase>().Where(p => p != ProjectPhase.None).ToList();
 
 // 2) Options d’ETAPE pour une PHASE donnée
 //    - si un mapping est défini ci-dessous, on filtre
 //    - sinon, on affiche toutes les étapes (hors None)
 private IReadOnlyList<ProjectEtape> EtapeEnumOptionsFor(ProjectPhase _)
-    => Enum.GetValues<ProjectEtape>()
-           .Where(e => e != ProjectEtape.None)
-           .ToList();
+                => Enum.GetValues<ProjectEtape>()
+                       .Where(e => e != ProjectEtape.None)
+                       .ToList();
 
 // 3) Mapping PHASE -> ETAPES (remplis au fur et à mesure ; à défaut : toutes les étapes)
 // 3) Mapping PHASE -> ETAPES (uniquement avec les membres de ton enum ProjectEtape)
@@ -1361,22 +1371,43 @@ private static readonly Dictionary<ProjectPhase, ProjectEtape[]> PhaseToEtapes =
 
 // 4) Conversion string (stockée dans ) <-> enum
 private static bool TryParsePhase(string? s, out ProjectPhase phase)
-    => Enum.TryParse<ProjectPhase>(s ?? "", ignoreCase: true, out phase);
+                => Enum.TryParse<ProjectPhase>(s ?? "", ignoreCase: true, out phase);
 
 private static bool TryParseEtape(string? s, out ProjectEtape etape)
-    => Enum.TryParse<ProjectEtape>(s ?? "", ignoreCase: true, out etape);
+                => Enum.TryParse<ProjectEtape>(s ?? "", ignoreCase: true, out etape);
 
 // 5) Handlers des selects
 private void OnPhaseChanged(WorkloadItem row, ChangeEventArgs e)
 {
-    row.Phase = e.Value?.ToString() ?? "";
-    StateHasChanged();
+        row.Phase = e.Value?.ToString() ?? "";
+        StateHasChanged();
 }
 
 private void OnEtapeChanged(WorkloadItem row, ChangeEventArgs e)
 {
-    row.Etape = e.Value?.ToString() ?? "";
+        row.Etape = e.Value?.ToString() ?? "";
 }
+
+
+////////////////////////////////////////
+///// SYNTHESE ////////////////
+    ///
+    ///
+    // VM lue par l’onglet Synthèse
+    private SyntheseService.SyntheseVm? vm;
+
+    // Construit/rafraîchit la synthèse à partir de l'état courant
+    private void RebuildSynthese()
+    {
+        vm = SyntheseAdaptater.BuildVmFromDomain(
+        project!,     // Project courant (déjà présent dans ta page)
+        wlRows,       // tes WorkloadItem (la méthode de mapping ignore le détail pour l’instant)
+        achatItem,    // List<AchatItem>
+        frais,        // List<FraisItem>
+        GetPlannedAllYears // TA méthode déjà présente: decimal GetPlannedAllYears(ProfilEntry r)
+        );
+        StateHasChanged();
+    }
 
 
 }
@@ -1629,50 +1660,287 @@ else if (project is not null)
     @* --- Onglet 2 : Synthèse & Métriques --- *@
     else if (activeTab == "summary")
     {
-        <div class="row g-3">
-            <div class="col-12 col-sm-6 col-lg-3">
-                <div class="card shadow-sm">
-                    <div class="card-body">
-                        <div class="text-muted small">Statut</div>
-                        <div class="fs-5">@StatusWithPhase(project.Status, project.Phase)</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-12 col-sm-6 col-lg-3">
-                <div class="card shadow-sm">
-                    <div class="card-body">
-                        <div class="text-muted small">Complexité</div>
-                        <div class="fs-5">@Label(project.Complexity)</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-12 col-sm-6 col-lg-3">
-                <div class="card shadow-sm">
-                    <div class="card-body">
-                        <div class="text-muted small">Début</div>
-                        <div class="fs-5">@(project.StartDate?.ToString("dd/MM/yyyy"))</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-12 col-sm-6 col-lg-3">
-                <div class="card shadow-sm">
-                    <div class="card-body">
-                        <div class="text-muted small">Fin prévue</div>
-                        <div class="fs-5">@(project.DueDate?.ToString("dd/MM/yyyy"))</div>
-                    </div>
-                </div>
-            </div>
+            @if (activeTab == "summary")
+            {
+                <div class="container-fluid">
+                    @if (vm is null)
+                    {
+                        <div class="text-muted">Synthèse en cours…</div>
+                    }
+                    else
+                    {
+                        <!-- Résumé haut -->
+                        <div class="row g-3">
+                            <div class="col-12 col-md-3">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-body">
+                                        <div class="text-muted small">JH total</div>
+                                        <div class="fs-5">@vm.JhTotal.ToString("N2")</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-3">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-body">
+                                        <div class="text-muted small">CA (jours valorisés)</div>
+                                        <div class="fs-5">@vm.CaTotal.ToString("N2") €</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-3">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-body">
+                                        <div class="text-muted small">Coût EN</div>
+                                        <div class="fs-5">@vm.CoutEnTotal.ToString("N2") €</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-3">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-body">
+                                        <div class="text-muted small">Montant du projet</div>
+                                        <div class="fs-5">@vm.MontantProjet.ToString("N2") €</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
 
-            <!-- Placeholder de métriques (à alimenter plus tard) -->
-            <div class="col-12">
-                <div class="card shadow-sm">
-                    <div class="card-header">Métriques clés</div>
-                    <div class="card-body text-muted">
-                        KPI, risques, commentaires — à venir.
-                    </div>
+                        <div class="row g-3 mt-1">
+                            <div class="col-12 col-md-3">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-body">
+                                        <div class="text-muted small">TJM Client</div>
+                                        <div class="fs-5">@vm.TjmClient.ToString("N2") € / JH</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-3">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-body">
+                                        <div class="text-muted small">CJM Production</div>
+                                        <div class="fs-5">@vm.CjmProd.ToString("N2") € / JH</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-3">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-body">
+                                        <div class="text-muted small">Marge brute Agence</div>
+                                        <div class="fs-5">@vm.MargeBruteAgencePct.ToString("P2")</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-3">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-body">
+                                        <div class="text-muted small">Marge brute EN</div>
+                                        <div class="fs-5">@vm.MargeBruteEnPct.ToString("P2")</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Frais / Achats / Marge nette -->
+                        <div class="row g-3 mt-1">
+                            <div class="col-12 col-md-3">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-body">
+                                        <div class="text-muted small">Frais budgétés</div>
+                                        <div class="fs-5">@vm.FraisBudget.ToString("N2") €</div>
+                                        <div class="text-muted small mt-2">Frais réels</div>
+                                        <div class="fs-6">@vm.FraisReels.ToString("N2") €</div>
+                                        <div class="text-muted small mt-2">Écart / JH</div>
+                                        <div class="fs-6">@vm.EcartFraisParJh.ToString("N2") € / JH</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-3">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-body">
+                                        <div class="text-muted small">Achats budgétés</div>
+                                        <div class="fs-5">@vm.AchatsBudget.ToString("N2") €</div>
+                                        <div class="text-muted small mt-2">Achats valorisés</div>
+                                        <div class="fs-6">@vm.AchatsValorise.ToString("N2") €</div>
+                                        <div class="text-muted small mt-2">Écart</div>
+                                        <div class="fs-6">@vm.EcartAchats.ToString("N2") € (@vm.TauxEcartAchats.ToString("P2"))</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-3">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-body">
+                                        <div class="text-muted small">Provision (JH)</div>
+                                        <div class="fs-5">@vm.ProvisionJh.ToString("N2")</div>
+                                        <div class="text-muted small mt-2">Provision (CA)</div>
+                                        <div class="fs-6">@vm.ProvisionCa.ToString("N2") €</div>
+                                        <div class="text-muted small mt-2">Provision / CA</div>
+                                        <div class="fs-6">@vm.ProvisionPct.ToString("P2")</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-3">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-body">
+                                        <div class="text-muted small">Marge nette EN</div>
+                                        <div class="fs-5">@vm.MargeNetteEn.ToString("N2") €</div>
+                                        <div class="text-muted small mt-2">Marge nette EN / Montant projet</div>
+                                        <div class="fs-6">@vm.MargeNetteEnPct.ToString("P2")</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Détails FO / CESSION / BACK -->
+                        <div class="row g-3 mt-1">
+                            <div class="col-12 col-xl-6">
+                                <div class="card shadow-sm">
+                                    <div class="card-body">
+                                        <div class="fw-semibold mb-2">FO</div>
+                                        <table class="table table-sm align-middle">
+                                            <thead>
+                                                <tr>
+                                                    <th>JH</th>
+                                                    <th>CA</th>
+                                                    <th>TJM</th>
+                                                    <th>CJM</th>
+                                                    <th>Marge EN</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr>
+                                                    <td>@vm.Fo.Jh.ToString("N2")</td>
+                                                    <td>@vm.Fo.Ca.ToString("N2") €</td>
+                                                    <td>@vm.Fo.Tjm.ToString("N2") €</td>
+                                                    <td>@vm.Fo.Cjm.ToString("N2") €</td>
+                                                    <td>@vm.Fo.MargeEnPct.ToString("P2")</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col-12 col-xl-6">
+                                <div class="card shadow-sm">
+                                    <div class="card-body">
+                                        <div class="fw-semibold mb-2">CESSION</div>
+                                        <table class="table table-sm align-middle">
+                                            <thead>
+                                                <tr>
+                                                    <th>JH</th>
+                                                    <th>CA</th>
+                                                    <th>TJM</th>
+                                                    <th>CJM</th>
+                                                    <th>TCI/PRCS €/JH</th>
+                                                    <th>Marge Agence</th>
+                                                    <th>Marge EN</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr>
+                                                    <td>@vm.Ces.Jh.ToString("N2")</td>
+                                                    <td>@vm.Ces.Ca.ToString("N2") €</td>
+                                                    <td>@vm.Ces.Tjm.ToString("N2") €</td>
+                                                    <td>@vm.Ces.Cjm.ToString("N2") €</td>
+                                                    <td>@vm.Ces.TciPrcsParJh.ToString("N2") €</td>
+                                                    <td>@vm.Ces.MargeAgencePct.ToString("P2")</td>
+                                                    <td>@vm.Ces.MargeEnPct.ToString("P2")</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row g-3 mt-1">
+                                <div class="col-12 col-xl-6">
+                                    <div class="card shadow-sm">
+                                        <div class="card-body">
+                                            <div class="fw-semibold mb-2">ACHAT</div>
+                                            <table class="table table-sm align-middle">
+                                                <thead>
+                                                    <tr>
+                                                        <th>JH</th>
+                                                        <th>CA</th>
+                                                        <th>TJM</th>
+                                                        <th>CJM</th>
+                                                        <th>Marge Agence</th>
+                                                        <th>Marge EN</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <tr>
+                                                        <td>@vm.Achat.Jh.ToString("N2")</td>
+                                                        <td>@vm.Achat.Ca.ToString("N2") €</td>
+                                                        <td>@vm.Achat.Tjm.ToString("N2") €</td>
+                                                        <td>@vm.Achat.Cjm.ToString("N2") €</td>
+                                                        <td>@vm.Achat.MargeAgencePct.ToString("P2")</td>
+                                                        <td>@vm.Achat.MargeEnPct.ToString("P2")</td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col-12">
+                                <div class="card shadow-sm">
+                                    <div class="card-body">
+                                        <div class="fw-semibold mb-2">BACK (BO + ACHAT BO)</div>
+                                        <table class="table table-sm align-middle">
+                                            <thead>
+                                                <tr>
+                                                    <th>Segment</th>
+                                                    <th>JH</th>
+                                                    <th>CA</th>
+                                                    <th>TJM</th>
+                                                    <th>CJM</th>
+                                                    <th>Marge EN</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr>
+                                                    <td>BO</td>
+                                                    <td>@vm.Back.Bo.Jh.ToString("N2")</td>
+                                                    <td>@vm.Back.Bo.Ca.ToString("N2") €</td>
+                                                    <td>@vm.Back.Bo.Tjm.ToString("N2") €</td>
+                                                    <td>@vm.Back.Bo.Cjm.ToString("N2") €</td>
+                                                    <td>@vm.Back.Bo.MargeEnPct.ToString("P2")</td>
+                                                </tr>
+                                                <tr>
+                                                    <td>ACHAT BO</td>
+                                                    <td>@vm.Back.AchatBo.Jh.ToString("N2")</td>
+                                                    <td>@vm.Back.AchatBo.Ca.ToString("N2") €</td>
+                                                    <td>@vm.Back.AchatBo.Tjm.ToString("N2") €</td>
+                                                    <td>@vm.Back.AchatBo.Cjm.ToString("N2") €</td>
+                                                    <td>@vm.Back.AchatBo.MargeEnPct.ToString("P2")</td>
+                                                </tr>
+                                            </tbody>
+                                            <tfoot>
+                                                <tr class="table-light">
+                                                    <td class="fw-semibold">TOTAL BACK</td>
+                                                    <td>@vm.Back.JhTotal.ToString("N2")</td>
+                                                    <td>@vm.Back.CaTotal.ToString("N2") €</td>
+                                                    <td>@vm.Back.Tjm.ToString("N2") €</td>
+                                                    <td>@vm.Back.Cjm.ToString("N2") €</td>
+                                                    <td>@vm.Back.MargeEnPct.ToString("P2")</td>
+                                                </tr>
+                                                <tr class="table-light">
+                                                    <td class="fw-semibold">PRCS moyen BACK</td>
+                                                    <td colspan="3"></td>
+                                                    <td>@vm.Back.PrcsMoyenParJh.ToString("N2") € / JH</td>
+                                                    <td>Marge FRONT / BACK : @vm.Back.MargeFrontBackPct.ToString("P2")</td>
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
                 </div>
-            </div>
-        </div>
+            }
+
     }
 
     @* --- Onglet 3 : Ressources & Charges --- *@

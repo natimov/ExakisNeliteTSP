@@ -1,12 +1,26 @@
 ﻿@namespace ExakisNeliteTSP.Components
+@inject NavigationManager NavManager
+@using Microsoft.AspNetCore.Components.Web
 
 
+<div class="col">
+    <div class="container" tabindex="0">
+        <!-- Face avant -->
+        <div class="front" style="@FrontBackground" @onclick="OnClick" role="button" tabindex="0" @onkeydown="HandleKeyDown">
+            <div class="inner">
+                <p>@Title</p>
+                <span>@Value</span>
+            </div>
+        </div>
 
-<div class="col-12 col-sm-6 col-lg-3">
-    <div class="card shadow-sm">
-        <div class="card-body">
-            <div class="text-muted small">@Title</div>
-            <div class="fs-3 fw-semibold">@Value</div>
+        <!-- Face arrière -->
+        <div class="back" style="@BackBackground" @onclick="OnClick" role="button">
+            <div class="inner">
+                @if (!string.IsNullOrWhiteSpace(BackText))
+                {
+                    <p>@BackText</p>
+                }
+            </div>
         </div>
     </div>
 </div>
@@ -14,4 +28,27 @@
 @code {
     [Parameter] public string Title { get; set; } = "";
     [Parameter] public int Value { get; set; }
+    [Parameter] public string? BackText { get; set; }
+    [Parameter] public string Color { get; set; } = "#4e73df";
+    [Parameter] public string BackColor { get; set; } = "#1cc88a";
+    [Parameter] public string NavigateUrl { get; set; } = "";
+
+    private string FrontBackground => $"background: linear-gradient(135deg, {Color});";
+    private string BackBackground => $"background: linear-gradient(135deg, {BackColor});";
+
+    private void OnClick()
+    {
+        if (!string.IsNullOrWhiteSpace(NavigateUrl))
+        {
+            NavManager.NavigateTo(NavigateUrl);
+        }
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" || e.Key == " ")
+        {
+            OnClick();
+        }
+    }
 }

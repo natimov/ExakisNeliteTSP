@@ -1,6 +1,6 @@
 ﻿<div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
-        <a class="navbar-brand" href="">ExakisNeliteTSP</a>
+        <a class="navbar-brand" href=""><img src="Logo_ExakisNelite_Blanc.png" alt="Logo Exakis Nelite" class="logo-sidebar" /></a>
     </div>
 </div>
 
@@ -10,17 +10,54 @@
     <nav class="flex-column">
         <div class="nav-item px-3">
             <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Accueil
+                <img src="Home.png" alt="Icone maison" width="25px" />
+                Accueil
             </NavLink>
         </div>
 
-      
+
 
         <div class="nav-item px-3">
             <NavLink class="nav-link" href="Projets">
-                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Projets
+                <img src="Projets.png" alt="Alternate Text" width="25px" />
+                Projets
             </NavLink>
         </div>
+
+        <div class="nav-item px-3 mt-3">
+            <label class="fw-semibold mb-1" for="serviceLineSelect">Service Line :</label>
+            <select id="serviceLineSelect" class="form-select" @onchange="ServiceLineChanged">
+                <option value="">Toutes</option>
+                @foreach (var sl in ServiceLines)
+                {
+                    <option value="@sl">@sl</option>
+                }
+            </select>
+        </div>
+
     </nav>
 </div>
+@code {
+    [Inject] private NavigationManager NavManager { get; set; } = default!;
 
+    // Liste des Service Lines disponibles (peut venir de ton service)
+    private List<string> ServiceLines = new() { "AID", "MD", "MW", "IT", "CMMD" };
+
+    private string? SelectedServiceLine { get; set; }
+
+    private void ServiceLineChanged(ChangeEventArgs e)
+    {
+        // Mise à jour de la valeur sélectionnée
+        SelectedServiceLine = e.Value?.ToString();
+
+        // Navigation vers la page courante avec query parameter
+        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
+        var baseUri = uri.GetLeftPart(UriPartial.Path);
+
+        var query = SelectedServiceLine != null && SelectedServiceLine != ""
+            ? $"?serviceLine={Uri.EscapeDataString(SelectedServiceLine)}"
+            : "";
+
+        NavManager.NavigateTo(baseUri + query);
+    }
+}

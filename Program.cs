@@ -5,6 +5,7 @@ using ExakisNeliteTSP.Services;
 using ExakisNeliteTSP.Services.Core;
 using ExakisNeliteTSP.Services.EF;
 using ExakisNeliteTSP.Services.Interface;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
@@ -31,7 +32,9 @@ builder.Services.AddScoped<IProjectEcheancierService, EFEcheancierService>();
 builder.Services.AddScoped<IWorkloadService, EFWorkloadService>();
 builder.Services.AddDbContext<TspDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
-
+// Ajouter ces 3 lignes :
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddAuthorizationCore(); // Si pas déjà présent
 // ---------------------------
 // 🔹 Configuration cookies & proxy (Easy Auth / Azure App Service)
 // ---------------------------

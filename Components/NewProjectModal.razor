@@ -4,8 +4,8 @@
 
 @if (Visible)
 {
-    <div class="modal fade show d-block" tabindex="-1" style="background:rgba(0,0,0,.5)">
-        <div class="modal-dialog modal-lg">
+    <div class="modal-overlay" tabindex="-1" style="background:rgba(0,0,0,.5)">
+        <div class="modal-container">
             <div class="modal-content">
 
                 <div class="modal-header">
@@ -72,10 +72,6 @@
                                 </div>
                             </div>
                         }
-
-                       
-                        
-
 
                         <div class="row g-3 mt-1">
                             <div class="col-md-6">
@@ -151,6 +147,27 @@
             model.Status = value;
             if (value != ProjectStatus.InProgress)
                 model.Phase = null; // on efface la phase si non pertinente
+        }
+    }
+
+    private bool showModal = false;  // contrôle l'affichage réel
+    private string modalClass = "fade-in"; // fade-in par défaut
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Visible && !showModal)
+        {
+            // ouverture
+            showModal = true;
+            modalClass = "fade-in show";
+        }
+        else if (!Visible && showModal)
+        {
+            // fermeture avec fade-out
+            modalClass = "fade-out hide";
+            // attendre la fin de l'animation avant de retirer le modal
+            await Task.Delay(300);
+            showModal = false;
         }
     }
 

@@ -82,3 +82,12 @@ public enum ProjectEtape
     HorsAbaques
 }
 
+public enum ServiceLine
+{
+    None,
+    AID,
+    MD,
+    MW,
+    Operations,
+    HR
+}

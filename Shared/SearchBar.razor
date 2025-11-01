@@ -1,0 +1,89 @@
+﻿@using ExakisNeliteTSP.Services.Interface
+@using ExakisNeliteTSP.Models
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+
+@inject IProjectService Projects
+@inject NavigationManager NavManager
+
+<div class="search-bar position-relative" @attributes="AdditionalAttributes">
+    <input type="text"
+           class="form-control search-input"
+           placeholder="Rechercher un projet..."
+           @bind="searchText"
+           @oninput="OnSearchChanged"
+           @onkeydown="HandleKeyDown" />
+
+    @if (suggestions?.Any() == true)
+    {
+        <ul class="suggestions-list list-group position-absolute mt-1 w-100 shadow-sm">
+            @foreach (var s in suggestions)
+            {
+                <li class="list-group-item list-group-item-action"
+                    @onclick="() => SelectSuggestion(s)">
+                    @s.Display
+                </li>
+            }
+        </ul>
+    }
+</div>
+
+@code {
+    [Parameter(CaptureUnmatchedValues = true)]
+    public Dictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private string searchText = string.Empty;
+    private List<(Guid Id, string Display)> suggestions = new();
+
+    private async Task OnSearchChanged(ChangeEventArgs e)
+    {
+        searchText = e.Value?.ToString() ?? "";
+
+        if (string.IsNullOrWhiteSpace(searchText))
+        {
+            suggestions.Clear();
+            return;
+        }
+
+        // 🔍 Recherche dans les projets
+        var allProjects = await Projects.GetAllAsync();
+        var lower = searchText.ToLower();
+
+        suggestions = allProjects
+            .Where(p =>
+                (!string.IsNullOrEmpty(p.Title) && p.Title.ToLower().Contains(lower)) ||
+                (!string.IsNullOrEmpty(p.Client) && p.Client.ToLower().Contains(lower)) ||
+                (!string.IsNullOrEmpty(p.ProjectLead) && p.ProjectLead.ToLower().Contains(lower)))
+            .Select(p => (p.Id, $"{p.Title} ({p.Client})"))
+            .Distinct()
+            .Take(5)
+            .ToList();
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            TriggerSearch();
+    }
+
+    private void TriggerSearch()
+    {
+        if (!string.IsNullOrWhiteSpace(searchText))
+            NavManager.NavigateTo($"/projets?search={Uri.EscapeDataString(searchText)}");
+
+        // Vider le texte et les suggestions
+        searchText = string.Empty;
+        suggestions.Clear();
+    }
+
+    private void SelectSuggestion((Guid Id, string Display) s)
+    {
+        // Navigation directe vers le projet
+        NavManager.NavigateTo($"/TSProjet/{s.Id}");
+
+        // Vider le champ de recherche et les suggestions
+        searchText = string.Empty;
+        suggestions.Clear();
+    }
+}
+
