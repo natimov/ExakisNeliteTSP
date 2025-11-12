@@ -33,7 +33,11 @@ builder.Services.AddScoped<IWorkloadService, EFWorkloadService>();
 builder.Services.AddDbContext<TspDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 // Ajouter ces 3 lignes :
+// ⬇️ AJOUTER ces deux lignes dans la section services :
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ExakisNeliteTSP.Services.Interface.ICurrentUserService, ExakisNeliteTSP.Services.Core.Auth.CurrentUserService>();
+
+
 builder.Services.AddAuthorizationCore(); // Si pas déjà présent
 // ---------------------------
 // 🔹 Configuration cookies & proxy (Easy Auth / Azure App Service)
@@ -54,6 +58,16 @@ builder.Services.Configure<ForwardedHeadersOptions>(opt =>
     opt.KnownNetworks.Clear();
     opt.KnownProxies.Clear();
 });
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultScheme = "Cookies";
+})
+.AddCookie("Cookies");
+
+builder.Services.AddAuthorization(); // côté serveur
+// (Tu peux conserver AddAuthorizationCore() si déjà présent pour les composants Blazor)
+
+
 
 // ---------------------------
 // 🔹 Build app
@@ -71,43 +85,44 @@ if (!app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseCookiePolicy();
+app.UseAuthentication();
 
-// ---------------------------
-// 🔹 Easy Auth (X-MS-CLIENT-PRINCIPAL) -> ClaimsPrincipal
-// ---------------------------
+// === Middleware EasyAuth (lecture X-MS-CLIENT-PRINCIPAL) ===
 app.Use(async (ctx, next) =>
 {
     if (ctx.Request.Headers.TryGetValue("X-MS-CLIENT-PRINCIPAL", out var header) && header.Count > 0)
     {
         try
         {
-            var json = Encoding.UTF8.GetString(Convert.FromBase64String(header!));
+            var raw = header![0];
+            var json = Encoding.UTF8.GetString(Convert.FromBase64String(raw));
 
-            // ← clé : désérialisation insensible à la casse
             var principal = JsonSerializer.Deserialize<ClientPrincipal>(
-                json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-            );
+                json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
             if (principal?.claims is { Length: > 0 } || principal?.Claims is { Length: > 0 })
             {
                 var all = principal!.claims ?? principal!.Claims!;
-                // ← clé : lire typ/val ou Typ/Val sans planter
                 var claims = all
-                    .Select(c => new Claim(c.typ ?? c.Typ ?? "", c.val ?? c.Val ?? ""))
+                    .Select(c => new Claim(c.typ ?? c.Typ ?? string.Empty, c.val ?? c.Val ?? string.Empty))
                     .Where(c => !string.IsNullOrEmpty(c.Type));
 
                 var identity = new ClaimsIdentity(claims, "EasyAuth");
                 ctx.User = new ClaimsPrincipal(identity);
             }
         }
-        catch { /* ignore */ }
+        catch
+        {
+            // silencieux
+        }
     }
 
     await next();
 });
 
-
+app.UseAuthorization();
 app.UseAntiforgery();
+
 
 // ---------------------------
 // 🔹 Mapping Blazor

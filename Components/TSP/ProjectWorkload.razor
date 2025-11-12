@@ -1,0 +1,272 @@
+﻿@* ProjectWorkload.razor — version Option 1 (wrappers Public côté parent) *@
+@using System.Globalization
+@using ExakisNeliteTSP.Models
+@using ExakisNeliteTSP.Services
+@using ExakisNeliteTSP.Components.Pages  @* ⬅️ adapte ce namespace si TSProjet n’est pas dans Pages *@
+
+@code {
+    [Parameter] public TSProjet Parent { get; set; } = default!;
+    private object? menuOpenForId;
+    private object? selectedRow;
+
+    private void ToggleRowMenu(dynamic r)
+    {
+        var id = (object?)r.Id;
+        menuOpenForId = Equals(menuOpenForId, id) ? null : id;
+    }
+}
+
+@if (Parent is null)
+{
+    <div class="text-danger">Workload : parent introuvable.</div>
+}
+else
+{
+    <div class="fw-semibold mb-2">Workload</div>
+
+    <div class="d-flex align-items-center gap-2 mb-2">
+        <button class="btn btn-primary btn-sm"
+                disabled="@Parent.Saving"
+                @onclick="Parent.SaveWorkloadAsyncPublic">
+            @(Parent.Saving ? "Enregistrement..." : "Enregistrer")
+        </button>
+
+        @if (Parent.LastSavedAt is not null)
+        {
+            <span class="text-muted small">Dernier enregistrement : @Parent.LastSavedAt?.ToString("HH:mm:ss")</span>
+        }
+        @if (!string.IsNullOrEmpty(Parent.SaveError))
+        {
+            <span class="text-danger small">(@Parent.SaveError)</span>
+        }
+    </div>
+
+    <div class="table-responsive wl-wrap" @onclick="() => menuOpenForId = null">
+        <table class="table table-sm wl-table mb-0">
+            @{
+                var profs = Parent.WlGetProfilesPublic();
+                int n = profs.Count;
+            }
+
+            <colgroup>
+                <col style="width:2.5rem;">   @* Actions (⋮) *@
+                <col style="width:5.5rem;">   @* ID *@
+                <col style="width:9rem;">     @* Lot *@
+                <col style="width:10rem;">    @* Phase *@
+                <col style="width:12rem;">    @* Étape *@
+                <col style="min-width:36rem;">@* Tâche *@
+                <col style="width:7rem;">     @* Total JH *@
+                <col style="width:11rem;">    @* Total Valorisation *@
+                @for (int i = 0; i < n; i++)
+                {
+                    <col style="width:6.5rem;">
+                }
+       @* JH par profil *@
+                @for (int i = 0; i < n; i++)
+                {
+                    <col style="width:8rem;">
+                }
+         @* € par profil *@
+                <col style="width:14rem;">    @* Livrable *@
+                <col style="width:18rem;">    @* Commentaire *@
+            </colgroup>
+
+            <thead>
+                @* -------- Ligne 1 : groupes principaux -------- *@
+                <tr class="wl-head-group">
+                    <th rowspan="2"></th>
+                    <th rowspan="2" class="wl-head-structure">ID</th>
+                    <th rowspan="2" class="wl-head-structure">Lot</th>
+                    <th rowspan="2" class="wl-head-structure">Phase</th>
+                    <th rowspan="2" class="wl-head-structure">Étape</th>
+                    <th rowspan="2" class="wl-head-structure wl-sep-right">Tâche</th>
+
+                    <th colspan="2" class="text-center wl-head-total wl-sep-right">SOUS TOTAL</th>
+                    <th colspan="@n" class="text-center wl-head-profil-jh wl-sep-right">Charge par profil</th>
+                    <th colspan="@n" class="text-center wl-head-profil-eu wl-sep-right">Valorisation par profil</th>
+
+                    <th rowspan="2" class="wl-head-comment">Livrable</th>
+                    <th rowspan="2" class="wl-head-comment">Hypothèses/Commentaire</th>
+                </tr>
+
+                @* -------- Ligne 2 : sous-colonnes -------- *@
+                <tr>
+                    <th class="text-end wl-head-total">TOTAL Charge</th>
+                    <th class="text-end wl-head-total wl-sep-right">TOTAL Valorisation</th>
+
+                    @for (var i = 0; i < profs.Count; i++)
+                    {
+                        var p = profs[i];
+                        var cls = $"text-end wl-head-profil-jh {(i == profs.Count - 1 ? "wl-sep-right" : "")}";
+                        <th class="@cls">@p.Name<br /><small>(JH)</small></th>
+                    }
+
+                    @for (var i = 0; i < profs.Count; i++)
+                    {
+                        var p = profs[i];
+                        var cls = $"text-end wl-head-profil-eu {(i == profs.Count - 1 ? "wl-sep-right" : "")}";
+                        <th class="@cls">@p.Name<br /><small>(€)</small></th>
+                    }
+                </tr>
+
+                @* -------- Ligne 3 : bandeau "SOUS-TOTAL visibles" -------- *@
+                <tr class="wl-subtotalbar">
+                    <th></th>
+                    <th colspan="5" class="text-end text-muted">SOUS-TOTAL visibles :</th>
+
+                    <th class="text-end fw-semibold">@Parent.WlGrandTotalJHPublic().ToString("N2")</th>
+                    <th class="text-end fw-semibold wl-sep-right">@Parent.WlGrandTotalValuePublic(profs).ToString("N2")</th>
+
+                    @for (var i = 0; i < profs.Count; i++)
+                    {
+                        var p = profs[i];
+                        var cls = $"text-end fw-semibold {(i == profs.Count - 1 ? "wl-sep-right" : "")}";
+                        <th class="@cls">@Parent.WlTotalChargesForProfilePublic(p.ProfileId).ToString("N2")</th>
+                    }
+
+                    @for (var i = 0; i < profs.Count; i++)
+                    {
+                        var p = profs[i];
+                        var cls = $"text-end fw-semibold {(i == profs.Count - 1 ? "wl-sep-right" : "")}";
+                        <th class="@cls">@Parent.WlTotalValuesForProfilePublic(p.ProfileId, p.PricePerDay).ToString("N2")</th>
+                    }
+
+                    <th></th>
+                    <th></th>
+                </tr>
+            </thead>
+
+            <tbody>
+                @foreach (var r in Parent.WlOrderedRowsPublic())
+                {
+                    var isParent = r.ParentId is null;
+                    var css = $"{Parent.PhaseCssPublic(r.Phase)} {(isParent ? "wl-parent" : "")}";
+
+                    <tr class="@css" @onclick="@(() => { selectedRow = r; menuOpenForId = null; })">
+                        <!-- Actions (menu 100% Blazor) -->
+                        <td class="text-center position-relative" @onclick:stopPropagation="true">
+                            <button class="btn btn-link btn-sm p-0" title="Actions" @onclick="() => ToggleRowMenu(r)">
+                                &#8942;  @* ⋮ *@
+                            </button>
+
+                            @if (Equals(menuOpenForId, r.Id))
+                            {
+                                <div class="wl-menu">
+                                    <button class="dropdown-item" @onclick="() => Parent.WlInsertParentBelowAtPublic(r)">+ Grande étape dessous</button>
+                                    <button class="dropdown-item" @onclick="() => Parent.WlInsertChildBelowAtPublic(r)">+ Sous-étape dessous</button>
+                                    <hr class="dropdown-divider" />
+                                    <button class="dropdown-item text-danger" @onclick="() => Parent.WlDeleteRowPublic(r)">Supprimer la ligne</button>
+                                </div>
+                            }
+                        </td>
+
+                        <!-- ID -->
+                        <td>@Parent.WlDisplayIdPublic(r)</td>
+
+                        <!-- Lot -->
+                        <td>
+                            @if (isParent)
+                            {
+                                <input class="form-control form-control-sm"
+                                       @bind="r.Lot"
+                                       @bind:after="() => Parent.WlPropagateFromParentPublic(r, lot: true, groupCode: false)" />
+                            }
+                            else
+                            {
+                                <input class="form-control form-control-sm" @bind="r.Lot" />
+                            }
+                        </td>
+
+                        <!-- Phase -->
+                        <td>
+                            @if (isParent)
+                            {
+                                <div class="text-muted small"></div>
+                            }
+                            else
+                            {
+                                <InputSelect class="form-select form-select-sm" @bind-Value="r.Phase">
+                                    @foreach (var ph in Enum.GetValues<ProjectPhase>())
+                                    {
+                                        if (ph == ProjectPhase.None) continue;
+                                        <option value="@ph">@Parent.LabelPhasePublic(ph)</option>
+                                    }
+                                </InputSelect>
+                            }
+                        </td>
+
+                        <!-- Étape -->
+                        <td>
+                            @if (isParent)
+                            {
+                                <div class="text-muted small"></div>
+                            }
+                            else
+                            {
+                                <InputSelect class="form-select form-select-sm" @bind-Value="r.Etape">
+                                    @foreach (var et in Enum.GetValues<ProjectEtape>())
+                                    {
+                                        if (et == ProjectEtape.None) continue;
+                                        <option value="@et">@Parent.LabelEtapePublic(et)</option>
+                                    }
+                                </InputSelect>
+                            }
+                    </td>
+
+
+                    <!-- Tâche -->
+                    <td><input class="form-control form-control-sm" @bind="r.Tache" /></td>
+
+                    <!-- TOTAL JH -->
+                    <td class="text-end">@Parent.WlSumChargesPublic(r, profs).ToString("N2")</td>
+
+                    <!-- TOTAL Valorisation (€) -->
+                    <td class="text-end">
+                        @((isParent
+                                            ? Parent.WlChildrenOfPublic(r.Id).Sum(c => Parent.WlSumRowValuesPublic(c, profs))
+                                            : Parent.WlSumRowValuesPublic(r, profs)).ToString("N2"))
+                </td>
+
+                        @* CHARGES (JH) par profil *@
+                @foreach (var p in profs)
+                        {
+                            if (isParent)
+                            {
+                                <td class="text-end">@Parent.WlSumChildrenChargesPublic(r.Id, p.ProfileId).ToString("N2")</td>
+                            }
+                            else
+                            {
+                                var has = r.ChargesByProfile.TryGetValue(p.ProfileId, out var jh);
+                                var s = has ? jh.ToString(CultureInfo.InvariantCulture) : string.Empty;
+
+                                <td>
+                                    <input type="number" step="0.5"
+                                           class="form-control form-control-sm text-end"
+                                           value="@s"
+                                           @onchange="(ChangeEventArgs e) => Parent.WlUpdateAllocPublic(r, p.ProfileId, e.Value?.ToString())" />
+                                </td>
+                            }
+                        }
+
+                        @* VALORISATION (€) par profil *@
+                        @foreach (var p in profs)
+                        {
+                            if (isParent)
+                            {
+                                <td class="text-end">@Parent.WlSumChildrenValuesPublic(r.Id, p.ProfileId, p.PricePerDay).ToString("N2")</td>
+                            }
+                            else
+                            {
+                                <td class="text-end">@Parent.WlValueForPublic(r, p.ProfileId, p.PricePerDay).ToString("N2")</td>
+                            }
+                        }
+
+                        <!-- Livrable / Commentaire -->
+                        <td><input class="form-control form-control-sm" @bind="r.Livrable" /></td>
+                        <td><input class="form-control form-control-sm" @bind="r.Commentaire" /></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

@@ -1,0 +1,289 @@
+﻿@* ProjectSynthese.razor *@
+@using ExakisNeliteTSP.Services
+@using ExakisNeliteTSP.Models
+
+@if (Vm is null)
+{
+    <div class="text-muted">Synthèse en cours…</div>
+}
+else
+{
+    <div class="container-fluid">
+        <!-- Résumé haut -->
+        <div class="row g-3">
+            <div class="col-12 col-md-3">
+                <div class="card shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="text-muted small">JH total</div>
+                        <div class="fs-5">@Vm.JhTotal.ToString("N2")</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-md-3">
+                <div class="card shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="text-muted small">CA (jours valorisés)</div>
+                        <div class="fs-5">@Vm.CaTotal.ToString("N2") €</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-md-3">
+                <div class="card shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="text-muted small">Coût EN</div>
+                        <div class="fs-5">@Vm.CoutEnTotal.ToString("N2") €</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-md-3">
+                <div class="card shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="text-muted small">Montant du projet</div>
+                        <div class="fs-5">@Vm.MontantProjet.ToString("N2") €</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-3 mt-1">
+            <div class="col-12 col-md-3">
+                <div class="card shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="text-muted small">TJM Client</div>
+                        <div class="fs-5">@Vm.TjmClient.ToString("N2") € / JH</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-md-3">
+                <div class="card shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="text-muted small">CJM Production</div>
+                        <div class="fs-5">@Vm.CjmProd.ToString("N2") € / JH</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-md-3">
+                <div class="card shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="text-muted small">Marge brute Agence</div>
+                        <div class="fs-5">@Vm.MargeBruteAgencePct.ToString("P2")</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-md-3">
+                <div class="card shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="text-muted small">Marge brute EN</div>
+                        <div class="fs-5">@Vm.MargeBruteEnPct.ToString("P2")</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Frais / Achats / Marge nette -->
+        <div class="row g-3 mt-1">
+            <div class="col-12 col-md-3">
+                <div class="card shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="text-muted small">Frais budgétés</div>
+                        <div class="fs-5">@Vm.FraisBudget.ToString("N2") €</div>
+                        <div class="text-muted small mt-2">Frais réels</div>
+                        <div class="fs-6">@Vm.FraisReels.ToString("N2") €</div>
+                        <div class="text-muted small mt-2">Écart / JH</div>
+                        <div class="fs-6">@Vm.EcartFraisParJh.ToString("N2") € / JH</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-md-3">
+                <div class="card shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="text-muted small">Achats budgétés</div>
+                        <div class="fs-5">@Vm.AchatsBudget.ToString("N2") €</div>
+                        <div class="text-muted small mt-2">Achats valorisés</div>
+                        <div class="fs-6">@Vm.AchatsValorise.ToString("N2") €</div>
+                        <div class="text-muted small mt-2">Écart</div>
+                        <div class="fs-6">@Vm.EcartAchats.ToString("N2") € (@Vm.TauxEcartAchats.ToString("P2"))</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-md-3">
+                <div class="card shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="text-muted small">Provision (JH)</div>
+                        <div class="fs-5">@Vm.ProvisionJh.ToString("N2")</div>
+                        <div class="text-muted small mt-2">Provision (CA)</div>
+                        <div class="fs-6">@Vm.ProvisionCa.ToString("N2") €</div>
+                        <div class="text-muted small mt-2">Provision / CA</div>
+                        <div class="fs-6">@Vm.ProvisionPct.ToString("P2")</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-md-3">
+                <div class="card shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="text-muted small">Marge nette EN</div>
+                        <div class="fs-5">@Vm.MargeNetteEn.ToString("N2") €</div>
+                        <div class="text-muted small mt-2">Marge nette EN / Montant projet</div>
+                        <div class="fs-6">@Vm.MargeNetteEnPct.ToString("P2")</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Détails FO / CESSION / ACHAT / BACK -->
+        <div class="row g-3 mt-1">
+            <!-- FO -->
+            <div class="col-12 col-xl-6">
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <div class="fw-semibold mb-2">FO</div>
+                        <table class="table table-sm align-middle">
+                            <thead>
+                                <tr>
+                                    <th>JH</th>
+                                    <th>CA</th>
+                                    <th>TJM</th>
+                                    <th>CJM</th>
+                                    <th>Marge EN</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>@Vm.Fo.Jh.ToString("N2")</td>
+                                    <td>@Vm.Fo.Ca.ToString("N2") €</td>
+                                    <td>@Vm.Fo.Tjm.ToString("N2") €</td>
+                                    <td>@Vm.Fo.Cjm.ToString("N2") €</td>
+                                    <td>@Vm.Fo.MargeEnPct.ToString("P2")</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CESSION -->
+            <div class="col-12 col-xl-6">
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <div class="fw-semibold mb-2">CESSION</div>
+                        <table class="table table-sm align-middle">
+                            <thead>
+                                <tr>
+                                    <th>JH</th>
+                                    <th>CA</th>
+                                    <th>TJM</th>
+                                    <th>CJM</th>
+                                    <th>TCI/PRCS €/JH</th>
+                                    <th>Marge Agence</th>
+                                    <th>Marge EN</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>@Vm.Ces.Jh.ToString("N2")</td>
+                                    <td>@Vm.Ces.Ca.ToString("N2") €</td>
+                                    <td>@Vm.Ces.Tjm.ToString("N2") €</td>
+                                    <td>@Vm.Ces.Cjm.ToString("N2") €</td>
+                                    <td>@Vm.Ces.TciPrcsParJh.ToString("N2") €</td>
+                                    <td>@Vm.Ces.MargeAgencePct.ToString("P2")</td>
+                                    <td>@Vm.Ces.MargeEnPct.ToString("P2")</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ACHAT -->
+            <div class="col-12 col-xl-6 mt-3">
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <div class="fw-semibold mb-2">ACHAT</div>
+                        <table class="table table-sm align-middle">
+                            <thead>
+                                <tr>
+                                    <th>JH</th>
+                                    <th>CA</th>
+                                    <th>TJM</th>
+                                    <th>CJM</th>
+                                    <th>Marge Agence</th>
+                                    <th>Marge EN</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>@Vm.Achat.Jh.ToString("N2")</td>
+                                    <td>@Vm.Achat.Ca.ToString("N2") €</td>
+                                    <td>@Vm.Achat.Tjm.ToString("N2") €</td>
+                                    <td>@Vm.Achat.Cjm.ToString("N2") €</td>
+                                    <td>@Vm.Achat.MargeAgencePct.ToString("P2")</td>
+                                    <td>@Vm.Achat.MargeEnPct.ToString("P2")</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- BACK -->
+            <div class="col-12 mt-3">
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <div class="fw-semibold mb-2">BACK (BO + ACHAT BO)</div>
+                        <table class="table table-sm align-middle">
+                            <thead>
+                                <tr>
+                                    <th>Segment</th>
+                                    <th>JH</th>
+                                    <th>CA</th>
+                                    <th>TJM</th>
+                                    <th>CJM</th>
+                                    <th>Marge EN</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>BO</td>
+                                    <td>@Vm.Back.Bo.Jh.ToString("N2")</td>
+                                    <td>@Vm.Back.Bo.Ca.ToString("N2") €</td>
+                                    <td>@Vm.Back.Bo.Tjm.ToString("N2") €</td>
+                                    <td>@Vm.Back.Bo.Cjm.ToString("N2") €</td>
+                                    <td>@Vm.Back.Bo.MargeEnPct.ToString("P2")</td>
+                                </tr>
+                                <tr>
+                                    <td>ACHAT BO</td>
+                                    <td>@Vm.Back.AchatBo.Jh.ToString("N2")</td>
+                                    <td>@Vm.Back.AchatBo.Ca.ToString("N2") €</td>
+                                    <td>@Vm.Back.AchatBo.Tjm.ToString("N2") €</td>
+                                    <td>@Vm.Back.AchatBo.Cjm.ToString("N2") €</td>
+                                    <td>@Vm.Back.AchatBo.MargeEnPct.ToString("P2")</td>
+                                </tr>
+                            </tbody>
+                            <tfoot>
+                                <tr class="table-light">
+                                    <td class="fw-semibold">TOTAL BACK</td>
+                                    <td>@Vm.Back.JhTotal.ToString("N2")</td>
+                                    <td>@Vm.Back.CaTotal.ToString("N2") €</td>
+                                    <td>@Vm.Back.Tjm.ToString("N2") €</td>
+                                    <td>@Vm.Back.Cjm.ToString("N2") €</td>
+                                    <td>@Vm.Back.MargeEnPct.ToString("P2")</td>
+                                </tr>
+                                <tr class="table-light">
+                                    <td class="fw-semibold">PRCS moyen BACK</td>
+                                    <td colspan="3"></td>
+                                    <td>@Vm.Back.PrcsMoyenParJh.ToString("N2") € / JH</td>
+                                    <td>Marge FRONT / BACK : @Vm.Back.MargeFrontBackPct.ToString("P2")</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public SyntheseService.SyntheseVm? Vm { get; set; }
+    [Parameter] public EventCallback OnRefresh { get; set; }
+}

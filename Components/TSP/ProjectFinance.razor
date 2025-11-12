@@ -1,4 +1,289 @@
-﻿@using ExakisNeliteTSP.Models
+﻿@* ProjectFinance.razor *@
+@using System.Globalization
+@using Microsoft.AspNetCore.Components.Forms
+@using ExakisNeliteTSP.Models
+@using ExakisNeliteTSP.Services
+@using ExakisNeliteTSP.Components.Pages
 
-@code { [Parameter] public int ProjectId { get; set; } }
-<div class="card shadow-sm"><div class="card-body">Finance — à brancher</div></div>
+@code {
+    [Parameter] public TSProjet Parent { get; set; } = default!;
+}
+
+@if (Parent is null)
+{
+    <div class="text-danger">Finance : parent introuvable.</div>
+}
+else
+{
+    @* ---------- Achats — Matériel / Logiciel ---------- *@
+    <div class="card shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span>Achats — Matériel / Logiciel</span>
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-secondary" @onclick="Parent.AddAchatRowPublic">Ajouter une ligne</button>
+                <button class="btn btn-sm btn-primary" @onclick="Parent.SaveAchatsAsyncPublic">Enregistrer</button>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Désignation</th>
+                        <th>Type</th>
+                        <th class="num">Coût unitaire (HT)</th>
+                        <th class="num">Qté</th>
+                        <th class="num">Montant achat (HT)</th>
+                        <th class="num">Coût unitaire revente (HT)</th>
+                        <th class="num">Montant revente (HT)</th>
+                        <th class="num">Markup %</th>
+                        <th>Commentaire</th>
+                        <th></th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    @if (Parent.AchatItemsPublic.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="10" class="text-center text-muted py-3">
+                                Aucun achat — cliquez « Ajouter une ligne ».
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var row in Parent.AchatItemsPublic)
+                        {
+                            <tr>
+                                <td>
+                                    <input class="form-control form-control-sm"
+                                           value="@row.Designation"
+                                           @oninput="e => row.Designation = e.Value?.ToString() ?? string.Empty" />
+                                </td>
+                                <td>
+                                    <InputSelect @bind-Value="row.PurchaseType" class="form-control form-control-sm col_type">
+                                        @foreach (var type in Enum.GetValues<PurchaseType>())
+                                        {
+                                            <option value="@type">@Parent.LabelPurchaseTypePublic(type)</option>
+                                        }
+                                    </InputSelect>
+                                </td>
+                                <td>
+                                    <InputNumber TValue="decimal?" class="form-control form-control-sm text-end"
+                                                 @bind-Value="row.UnitCostHt" />
+                                </td>
+                                <td>
+                                    <InputNumber TValue="decimal?" class="form-control form-control-sm text-end col_quanti"
+                                                 @bind-Value="row.Quantity" />
+                                </td>
+                                <td class="text-end">
+                                    @((row.AmountPurchaseHt ?? (row.UnitCostHt ?? 0m) * (row.Quantity ?? 0m)).ToString("N2"))
+                                </td>
+                                <td>
+                                    <InputNumber TValue="decimal?" class="form-control form-control-sm text-end"
+                                                 @bind-Value="row.UnitResaleHt" />
+                                </td>
+                                <td class="text-end">
+                                    @((row.AmountResaleHt ?? (row.UnitResaleHt ?? 0m) * (row.Quantity ?? 0m)).ToString("N2"))
+                                </td>
+                                <td class="text-end">
+                                    @((row.MarkupPercent ?? (
+                                        ((row.UnitResaleHt ?? 0m) * (row.Quantity ?? 0m) > 0m
+                                            ? (((row.UnitResaleHt ?? 0m) * (row.Quantity ?? 0m)) - ((row.UnitCostHt ?? 0m) * (row.Quantity ?? 0m)))
+                                                / ((row.UnitResaleHt ?? 0m) * (row.Quantity ?? 0m))
+                                            : 0m)
+                                        )).ToString("P2"))
+                                </td>
+                                <td>
+                                    <input class="form-control form-control-sm"
+                                           value="@row.Comment"
+                                           @oninput="e => row.Comment = e.Value?.ToString() ?? string.Empty" />
+                                </td>
+                                <td>
+                                    <button class="btn btn-outline-danger btn-sm" @onclick="@(() => Parent.DeleteAchatRowPublic(row))">❌</button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+
+                @if (Parent.AchatItemsPublic.Count > 0)
+                {
+                    var totalAchat = Parent.AchatItemsPublic.Sum(x => x.AmountPurchaseHt ?? (x.UnitCostHt ?? 0m) * (x.Quantity ?? 0m));
+                    var totalRevente = Parent.AchatItemsPublic.Sum(x => x.AmountResaleHt ?? (x.UnitResaleHt ?? 0m) * (x.Quantity ?? 0m));
+
+                    <tfoot class="table-light fw-semibold">
+                        <tr>
+                            <td colspan="4" class="text-end">TOTAL</td>
+                            <td class="text-end">@totalAchat.ToString("N2")</td>
+                            <td></td>
+                            <td class="text-end">@totalRevente.ToString("N2")</td>
+                            <td class="text-end">@((totalAchat > 0 ? (totalRevente - totalAchat) / totalAchat : 0m).ToString("P2"))</td>
+                            <td colspan="2"></td>
+                        </tr>
+                    </tfoot>
+                }
+            </table>
+        </div>
+    </div>
+
+    @* ---------- Achat Prestataires externes ---------- *@
+    <div class="card shadow-sm mt-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span>Achat Prestataires externes</span>
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-secondary" @onclick="Parent.AddPrestaRowPublic">Ajouter une ligne</button>
+                <button class="btn btn-sm btn-primary" @onclick="Parent.SavePrestasAsyncPublic">Enregistrer</button>
+            </div>
+        </div>
+
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    @{
+                        var prestaRows = Parent.PrestaItemsPublic;
+                        decimal sumCoutJour = prestaRows.Sum(r => r.CoutJour ?? 0m);
+                        decimal sumNbj = prestaRows.Sum(r => r.NbJours ?? 0m);
+                        decimal sumTjm = prestaRows.Sum(r => r.Tjm ?? 0m);
+                        decimal totalCoutP = prestaRows.Sum(r => r.TotalCout ?? 0m);
+                        decimal totalReventeP = prestaRows.Sum(r => r.MontantRevente ?? 0m);
+                        decimal? markupGlobalP = totalReventeP > 0 ? (totalReventeP - totalCoutP) / totalReventeP : (decimal?)null;
+                    }
+
+                    <thead class="table-light">
+                        <tr>
+                            <th class="col-wide">Prestation</th>
+                            <th class="col-wide">Société</th>
+                            <th class="col-narrow text-end">Coût jour (HT)</th>
+                            <th class="col-narrow text-end">Nbj</th>
+                            <th class="text-end">Total coût (HT)</th>
+                            <th class="col-narrow text-end">TJM (HT)</th>
+                            <th class="text-end">Montant revente (HT)</th>
+                            <th class="text-end">Markup (%)</th>
+                            <th class="col-wide">Commentaire</th>
+                            <th style="width:48px"></th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        @if (prestaRows.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="10" class="text-center text-muted py-3">Aucune ligne — cliquez « Ajouter une ligne ».</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var r in prestaRows)
+                            {
+                                <tr>
+                                    <td class="col-wide"><InputText class="form-control form-control-sm" @bind-Value="r.Prestation" /></td>
+                                    <td class="col-wide"><InputText class="form-control form-control-sm" @bind-Value="r.Societe" /></td>
+                                    <td class="col-narrow"><InputNumber TValue="decimal?" class="form-control form-control-sm text-end" @bind-Value="r.CoutJour" /></td>
+                                    <td class="col-narrow"><InputNumber TValue="decimal?" class="form-control form-control-sm text-end" @bind-Value="r.NbJours" /></td>
+                                    <td class="text-end"><input class="form-control form-control-sm text-end" value="@((r.TotalCout ?? 0m).ToString("N2"))" readonly /></td>
+                                    <td class="col-narrow"><InputNumber TValue="decimal?" class="form-control form-control-sm text-end" @bind-Value="r.Tjm" /></td>
+                                    <td class="text-end"><input class="form-control form-control-sm text-end" value="@((r.MontantRevente ?? 0m).ToString("N2"))" readonly /></td>
+                                    <td class="text-end"><input class="form-control form-control-sm text-end" value="@(r.MarkupPercent.HasValue ? (r.MarkupPercent.Value * 100m).ToString("N2") + " %" : "")" readonly /></td>
+                                    <td class="col-wide"><InputText class="form-control form-control-sm" @bind-Value="r.Commentaire" /></td>
+                                    <td class="text-end">
+                                        <button class="btn btn-outline-danger btn-sm" @onclick="() => Parent.DeletePrestaAsyncPublic(r)">❌</button>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+
+                    <tfoot class="table-light">
+                        <tr class="fw-semibold">
+                            <td>TOTAL</td>
+                            <td></td>
+                            <td class="text-end">@sumCoutJour.ToString("N2")</td>
+                            <td class="text-end">@sumNbj.ToString("N2")</td>
+                            <td class="text-end">@totalCoutP.ToString("N2")</td>
+                            <td class="text-end">@sumTjm.ToString("N2")</td>
+                            <td class="text-end">@totalReventeP.ToString("N2")</td>
+                            <td class="text-end">@((markupGlobalP.HasValue ? (markupGlobalP.Value * 100m).ToString("N2") + " %" : ""))</td>
+                            <td></td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    @* ---------- Frais ---------- *@
+    <div class="card shadow-sm mt-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span>Frais</span>
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-secondary" @onclick="Parent.AddFraisRowPublic">Ajouter une ligne</button>
+                <button class="btn btn-sm btn-primary" @onclick="Parent.SaveFraisAsyncPublic">Enregistrer</button>
+            </div>
+        </div>
+
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    @{
+                        var fraisRows = Parent.FraisItemsPublic;
+                        decimal totalMontant = fraisRows.Sum(f => f.Montant ?? 0m);
+                        decimal totalRefacture = fraisRows.Sum(f => f.MontantRefacture ?? 0m);
+                    }
+
+                    <thead class="table-light">
+                        <tr>
+                            <th>Libellé frais</th>
+                            <th class="text-end">Coût unitaire (HT)</th>
+                            <th class="text-end">Quantité</th>
+                            <th class="text-end">Montant (HT)</th>
+                            <th class="text-end">Montant refacturé (HT)</th>
+                            <th>Commentaire</th>
+                            <th style="width:48px"></th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        @if (fraisRows.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="7" class="text-center text-muted py-3">Aucun frais — cliquez « Ajouter une ligne ».</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var r in fraisRows)
+                            {
+                                <tr>
+                                    <td><InputText class="form-control form-control-sm" @bind-Value="r.Libelle" /></td>
+                                    <td><InputNumber TValue="decimal?" class="form-control form-control-sm text-end" @bind-Value="r.CoutUnitaire" /></td>
+                                    <td><InputNumber TValue="decimal?" class="form-control form-control-sm text-end" @bind-Value="r.Quantite" /></td>
+                                    <td class="text-end">@((r.Montant ?? 0m).ToString("N2"))</td>
+                                    <td><InputNumber TValue="decimal?" class="form-control form-control-sm text-end" @bind-Value="r.MontantRefacture" /></td>
+                                    <td><InputText class="form-control form-control-sm" @bind-Value="r.Commentaire" /></td>
+                                    <td class="text-end">
+                                        <button class="btn btn-outline-danger btn-sm" @onclick="() => Parent.DeleteFraisAsyncPublic(r)">❌</button>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+
+                    <tfoot class="table-light">
+                        <tr class="fw-semibold">
+                            <td>Total</td>
+                            <td></td>
+                            <td></td>
+                            <td class="text-end">@totalMontant.ToString("N2")</td>
+                            <td class="text-end">@totalRefacture.ToString("N2")</td>
+                            <td></td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+}

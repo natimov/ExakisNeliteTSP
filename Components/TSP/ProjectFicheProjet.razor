@@ -1,0 +1,264 @@
+﻿@using ExakisNeliteTSP.Models
+@using Microsoft.AspNetCore.Components
+@using ExakisNeliteTSP.Components.Pages
+@code {
+    [Parameter] public TSProjet Parent { get; set; } = default!;
+}
+
+<div class="card shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Fiche projet</span>
+
+        @if (!Parent.IsEditingPublic)
+        {
+            <button class="btn btn-sm btn-primary" @onclick="() => Parent.IsEditingPublic = true">
+                Modifier
+            </button>
+        }
+    </div>
+
+    <div class="card-body">
+        @if (!Parent.IsEditingPublic)
+        {
+            var p = Parent.ProjectPublic;
+
+            <div class="row g-3">
+
+                <div class="col-md-6">
+                    <strong>Titre</strong>
+                    <div>@p.Title</div>
+                </div>
+
+                <div class="col-md-6">
+                    <strong>Client</strong>
+                    <div>@p.Client</div>
+                </div>
+
+                <div class="col-md-6">
+                    <strong>Chef de projet</strong>
+                    <div>@p.ProjectLead</div>
+                </div>
+
+                <div class="col-md-3">
+                    <strong>Début</strong>
+                    <div>@(p.StartDate?.ToString("dd/MM/yyyy"))</div>
+                </div>
+
+                <div class="col-md-3">
+                    <strong>Fin prévue</strong>
+                    <div>@(p.DueDate?.ToString("dd/MM/yyyy"))</div>
+                </div>
+
+                <div class="col-md-3">
+                    <strong>Statut</strong>
+                    <div>@Parent.StatusWithPhasePublic(p.Status, p.Phase)</div>
+                </div>
+
+                <div class="col-md-3">
+                    <strong>Complexité</strong>
+                    <div>@Parent.LabelComplexityPublic(p.Complexity)</div>
+                </div>
+
+                <div class="col-md-6">
+                    <strong>Référence propale</strong>
+                    <div>@p.ProposalRef</div>
+                </div>
+
+                <div class="col-md-6">
+                    <strong>Contact client</strong>
+                    <div>@p.ClientContact</div>
+                </div>
+
+                <div class="col-md-6">
+                    <strong>Agence</strong>
+                    <div>@p.Agency</div>
+                </div>
+
+                <div class="col-md-6">
+                    <strong>Service line</strong>
+                    <div>@p.ServiceLine</div>
+                </div>
+
+                <div class="col-md-6">
+                    <strong>Directeur d’agence</strong>
+                    <div>@p.AgencyDirector</div>
+                </div>
+
+                <div class="col-md-6">
+                    <strong>Responsable SL</strong>
+                    <div>@p.ServiceLineManager</div>
+                </div>
+
+                <div class="col-md-6">
+                    <strong>Commercial</strong>
+                    <div>@p.SalesRep</div>
+                </div>
+
+                <div class="col-md-6">
+                    <strong>Chef de projet back (Unit4)</strong>
+                    <div>@p.BackProjectManager</div>
+                </div>
+
+                <div class="col-md-3">
+                    <strong>Type de contrat</strong>
+                    <div>@p.ContractType</div>
+                </div>
+
+                <div class="col-md-3">
+                    <strong>Montant du contrat</strong>
+                    <div>@Parent.MoneyPublic(p.ContractAmount)</div>
+                </div>
+
+                <div class="col-md-3">
+                    <strong>dont CA back</strong>
+                    <div>@Parent.MoneyPublic(p.ContractCaBack)</div>
+                </div>
+
+                <div class="col-md-3">
+                    <strong>Montant du contrat back</strong>
+                    <div>@Parent.MoneyPublic(p.ContractBackAmount)</div>
+                </div>
+
+            </div>
+        }
+        else
+        {
+            <EditForm Model="Parent.ProjectPublic" OnValidSubmit="Parent.SaveOverviewPublic">
+                <DataAnnotationsValidator />
+                <div class="row g-3">
+
+                    <div class="col-md-6">
+                        <label class="form-label">Titre</label>
+                        <InputText class="form-control" @bind-Value="Parent.ProjectPublic.Title" />
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Client</label>
+                        <InputText class="form-control" @bind-Value="Parent.ProjectPublic.Client" />
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Chef de projet</label>
+                        <InputText class="form-control" @bind-Value="Parent.ProjectPublic.ProjectLead" />
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label">Début</label>
+                        <InputDate class="form-control" @bind-Value="Parent.ProjectPublic.StartDate" />
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label">Fin prévue</label>
+                        <InputDate class="form-control" @bind-Value="Parent.ProjectPublic.DueDate" />
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label">Statut</label>
+                        <InputSelect class="form-select"
+                                     @bind-Value="Parent.ProjectPublic.Status"
+                                     @onchange="Parent.OnStatusChangedPublic">
+                            @foreach (var s in Enum.GetValues<ProjectStatus>())
+                            {
+                                <option value="@s">@Parent.LabelStatusPublic(s)</option>
+                            }
+                        </InputSelect>
+                    </div>
+
+                    @if (Parent.ProjectPublic.Status == ProjectStatus.InProgress)
+                    {
+                        <div class="col-md-3">
+                            <label class="form-label">Phase (En cours)</label>
+                            <InputSelect class="form-select" TValue="ProjectPhase?"
+                                         @bind-Value="Parent.ProjectPublic.Phase">
+                                <option value="">—</option>
+                                @foreach (var ph in Enum.GetValues<ProjectPhase>())
+                                {
+                                    if (ph == ProjectPhase.None) { continue; }
+                                    <option value="@ph">@Parent.LabelPublic(ph)</option>
+                                }
+                            </InputSelect>
+                        </div>
+                    }
+
+                    <div class="col-md-3">
+                        <label class="form-label">Complexité</label>
+                        <InputSelect class="form-select" @bind-Value="Parent.ProjectPublic.Complexity">
+                            @foreach (var c in Enum.GetValues<Complexity>())
+                            {
+                                <option value="@c">@Parent.LabelComplexityPublic(c)</option>
+                            }
+                        </InputSelect>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Référence propale</label>
+                        <InputText class="form-control" @bind-Value="Parent.ProjectPublic.ProposalRef" />
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Contact client</label>
+                        <InputText class="form-control" @bind-Value="Parent.ProjectPublic.ClientContact" />
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Agence</label>
+                        <InputText class="form-control" @bind-Value="Parent.ProjectPublic.Agency" />
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Service line</label>
+                        <InputText class="form-control" @bind-Value="Parent.ProjectPublic.ServiceLine" />
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Directeur d’agence</label>
+                        <InputText class="form-control" @bind-Value="Parent.ProjectPublic.AgencyDirector" />
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Responsable SL</label>
+                        <InputText class="form-control" @bind-Value="Parent.ProjectPublic.ServiceLineManager" />
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Commercial</label>
+                        <InputText class="form-control" @bind-Value="Parent.ProjectPublic.SalesRep" />
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Chef de projet back (Unit4)</label>
+                        <InputText class="form-control" @bind-Value="Parent.ProjectPublic.BackProjectManager" />
+                    </div>
+
+                    <div class="row g-3 mt-1">
+                        <div class="col-md-3">
+                            <label class="form-label">Type de contrat</label>
+                            <InputText class="form-control" @bind-Value="Parent.ProjectPublic.ContractType" />
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label">Montant du contrat</label>
+                            <InputNumber class="form-control" @bind-Value="Parent.ProjectPublic.ContractAmount" />
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label">dont CA back</label>
+                            <InputNumber class="form-control" @bind-Value="Parent.ProjectPublic.ContractCaBack" />
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label">Montant du contrat back</label>
+                            <InputNumber class="form-control" @bind-Value="Parent.ProjectPublic.ContractBackAmount" />
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="mt-3 d-flex gap-2">
+                    <button class="btn btn-primary" type="submit">Enregistrer</button>
+                    <button class="btn btn-outline-secondary" type="button" @onclick="Parent.CancelOverviewPublic">Annuler</button>
+                </div>
+            </EditForm>
+        }
+    </div>
+</div>
