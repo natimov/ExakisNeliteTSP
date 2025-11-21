@@ -5,9 +5,28 @@
 body, html {
     height: 100%;
     margin: 0;
+    font-family: Montserrat;
+}
+
+body {
     display: flex;
     flex-direction: column;
-    font-family: Montserrat;
+    min-height: 100vh;
+}
+
+    body,
+    body *:not(canvas) {
+        transition: background 1s ease, color 1s ease, border-color 1s ease, box-shadow 1s ease;
+    }
+
+        body.dark-mode {
+            background-color: #2d2d30;
+            color: #f0f0f0;
+        }
+
+div.top-row.px-4.dark-mode {
+    background-color: #2d2d30;
+    color: #f0f0f0;
 }
 
 /* Contenu principal */
@@ -15,8 +34,39 @@ body, html {
     flex: 1;
     display: flex;
     flex-direction: column;
-    /*    margin-bottom: 2rem;*/
 }
+
+/* ============================================================== */
+/*                            BOUTON THEME                        */
+/* ============================================================== */
+#theme-toggle {
+    margin: 1rem;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    border: none;
+    background-color: #000;
+    color: #ffff;
+    font-size: 1.2rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 5px rgba(0,0,0.8,0);
+}
+
+    #theme-toggle:hover {
+        transform: scale(1.08);
+    }
+
+    #theme-toggle:active {
+        background-color: #444;
+        color: #ff0;
+    }
+
+/* ============================================================== */
+/*                       SCROLL TO TOP BUTTON                     */
+/* ============================================================== */
 
 .scroll-to-top {
     position: fixed;
@@ -50,13 +100,25 @@ body, html {
     }
 
 /* ============================================================== */
+/*                  DARK MODE - SCROLL TO TOP BUTTON              */
+/* ============================================================== */
+
+body.dark-mode .scroll-to-top {
+    background-color: #00b9ff;
+    border: 0.5px solid #003c5a;
+}
+
+    body.dark-mode .scroll-to-top img {
+        filter: brightness(0) invert(0);
+    }
+/* ============================================================== */
 /*                              HEADER                            */
 /* ============================================================== */
 
 div.top-row.px-4 {
     display: flex;
     position: relative;
-    background-color: #ffffff;
+    background-color: #f0f0f0;
     align-items: center;
     justify-content: flex-start;
     box-shadow: 10px 10px 15px rgba(0, 0, 0, 0.2) !important;
@@ -124,6 +186,39 @@ div.top-row.ps-3 {
 
 img.account-icon {
     height: 1.5rem;
+}
+
+
+/* ============================================================== */
+/*                       DARK MODE - SIDEBAR                      */
+/* ============================================================== */
+
+body.dark-mode div.top-row.ps-3 {
+    background-color: #2d2d30;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6) !important;
+    transition: background 1s ease, box-shadow 1s ease;
+}
+
+    body.dark-mode div.top-row.ps-3 a,
+    body.dark-mode div.top-row.ps-3 span,
+    body.dark-mode div.top-row.ps-3 i {
+        color: #e0e0e0 !important;
+        transition: color 1s ease;
+    }
+
+        body.dark-mode div.top-row.ps-3 a:hover,
+        body.dark-mode div.top-row.ps-3 i:hover {
+            color: #2d2d30 !important;
+        }
+
+/* ============================================================== */
+/*                        DARK MODE - HEADER                      */
+/* ============================================================== */
+
+body.dark-mode div.top-row.px-4 {
+    background-color: #2d2d30;
+    color: #f5f5f5;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6) !important;
 }
 
 
@@ -251,6 +346,24 @@ button.newProject {
     }
 
 /* ============================================================== */
+/*                          DARK MODE - BOUTONS                   */
+/* ============================================================== */
+
+/* Voir tous les projets */
+body.dark-mode a.seeAllProjects, button.seeAllProjects {
+    background-color: #2d2d30;
+    color: #ffffff;
+    border-color: #003c5a;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6) !important;
+}
+
+body.dark-mode button.newProject {
+    background-color: #003c5a;
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6) !important;
+}
+
+/* ============================================================== */
 /*                        MODAL NOUVEAU PROJET                    */
 /* ============================================================== */
 
@@ -258,7 +371,7 @@ button.newProject {
 .modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(12, 18, 28, 0.55);
+    background: #f0f0f0;
     backdrop-filter: blur(4px);
     display: flex;
     justify-content: center;
@@ -462,65 +575,91 @@ button.newProject {
 }
 
 /* ============================================================== */
+/*                  DARK MODE - MODAL NOUVEAU PROJET              */
+/* ============================================================== */
+
+body.dark-mode .modal-overlay {
+    background: rgba(0, 28, 43, 0.85);
+    backdrop-filter: blur(4px);
+}
+
+body.dark-mode .modal-container {
+    background: #2d2d30;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+
+body.dark-mode .modal-header {
+    background: linear-gradient(90deg, #2d2d30, #003c5a);
+    color: #f0f0f0;
+}
+
+body.dark-mode .modal-body {
+    background: #2d2d30;
+    color: #e0e0e0;
+}
+
+    body.dark-mode .modal-body label {
+        color: #f0f0f0;
+    }
+
+    body.dark-mode .modal-body input,
+    body.dark-mode .modal-body select {
+        background-color: #2d2d30;
+        border: 1px solid #00b9ff;
+        color: #f0f0f0;
+    }
+
+        body.dark-mode .modal-body input:focus,
+        body.dark-mode .modal-body select:focus {
+            border-color: #00b9ff;
+        }
+
+body.dark-mode .modal-footer {
+    background: #2d2d30;
+    border-top: 1px solid #00b9ff;
+}
+
+body.dark-mode .btn-primary {
+    background-color: #004466;
+    color: #f0f0f0;
+}
+
+    body.dark-mode .btn-primary:hover {
+        background-color: #0078d7;
+    }
+
+body.dark-mode .btn-secondary {
+    background-color: #004466;
+    color: #f0f0f0;
+    border: 1px solid #00b9ff;
+}
+
+    body.dark-mode .btn-secondary:hover {
+        background-color: #005580;
+    }
+
+/* ============================================================== */
 /*                   CANVAS + CARTE NOTIFICATIONS                 */
 /* ============================================================== */
 
 .dashboard-section {
-    max-width: 1200px;
+    width: 100%;
+    max-width: 100%;
     display: flex;
-    justify-content: flex-start;
-    align-items: stretch;
+    justify-content: center;
+    align-items: flex-start;
     gap: 2rem;
     flex-wrap: wrap;
-    margin-top: 2rem;
+    margin: 2rem 0 0 0;
+    padding: 0 1rem;
+    box-sizing: border-box;
 }
 
 /* Carte du graphique */
 .chart-card {
-    flex: 1 1 350px;
-    max-width: 350px;
-    height: 400px;
-    background: #fff;
-    border-radius: 16px;
-    padding: 0 3rem 3rem;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
+    flex: 1 1 calc(100% - 350px - 2rem);
+    min-width: 350px;
     max-width: 100%;
-    box-sizing: border-box;
-}
-
-.chart-area {
-    position: relative;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    justify-content: center;
-    flex-direction: column;
-    align-items: center;
-    padding-top: 20px;
-    gap: 10px;
-    margin-top: 10px;
-}
-
-    .chart-area h4.chart-title {
-        margin: 20px 0 0 0;
-        font-size: 1.2rem;
-        color: #333;
-        text-align: center;
-    }
-
-    .chart-area canvas {
-        width: 100%;
-        height: auto;
-        display: block;
-    }
-
-/* Notifications à droite */
-.notifications-card {
-    flex: 1 1 300px;
-    max-width: 350px;
     background: #fff;
     border-radius: 16px;
     padding: 1.5rem;
@@ -528,13 +667,54 @@ button.newProject {
     box-sizing: border-box;
 }
 
+.chart-area {
+    width: 100%;
+    height: 32rem;
+    display: flex;
+    flex-direction: column;
+}
+
+    .chart-area h4.chart-title {
+        margin: 0 0 1rem 0;
+        font-size: 1.2rem;
+        color: #333;
+        text-align: center;
+    }
+
+    .chart-area canvas {
+        height: calc(100% - 2rem) !important;
+        width: 100% !important;
+    }
+
+/* Notifications à droite */
+.notifications-card {
+    flex: 0 0 350px;
+    min-width: 350px;
+    background: #fff;
+    border-radius: 16px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    box-sizing: border-box;
+}
+
+    .notifications-card h4 {
+        margin-top: 0;
+    }
+
     .notifications-card ul {
         list-style: none;
         padding: 0;
         margin: 0;
     }
 
-@media (max-width: 1024px) {
+    .notifications-card li {
+        margin-bottom: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+@media (max-width: 900px) {
     .dashboard-section {
         flex-direction: column;
         align-items: stretch;
@@ -542,12 +722,13 @@ button.newProject {
 
     .chart-card,
     .notifications-card {
-        flex: 1 1 100%;
+        flex: 1 1 auto;
+        min-width: 100%;
         max-width: 100%;
     }
 
-    .chart-area canvas {
-        max-width: 100%;
+    .chart-area {
+        height: 300px;
     }
 }
 
@@ -556,13 +737,37 @@ button.newProject {
         padding: 1rem;
     }
 
-        .chart-card h4 {
-            font-size: 1rem;
-        }
+    .chart-area {
+        height: 250px;
+    }
+
+    .chart-card h4 {
+        font-size: 1rem;
+    }
 
     .notifications-card {
         padding: 1rem;
+        min-width: 100%;
     }
+}
+/* ============================================================== */
+/*                 DARK MODE - CANVAS + CARD NOTIFS               */
+/* ============================================================== */
+
+body.dark-mode .chart-card,
+body.dark-mode .notifications-card {
+    background: #003c5a;
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6) !important;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+body.dark-mode .chart-area h4.chart-title {
+    color: #ffffff;
+}
+
+body.dark-mode .notifications-card ul li {
+    color: #e0e0e0;
 }
 
 /* ============================================================== */
@@ -709,6 +914,104 @@ span.phase-text {
 }
 
 /* ============================================================== */
+/*                 DARK MODE - TABLEAU PROJETS RECENTS            */
+/* ============================================================== */
+
+/* ===============================
+             Badges phases
+   =============================== */
+
+body.dark-mode .badge.phase-pilotage {
+    background-color: #004d3d;
+    color: #fff;
+}
+
+body.dark-mode .badge.phase-conception {
+    background-color: #007a62;
+    color: #fff;
+}
+
+body.dark-mode .badge.phase-construction {
+    background-color: #5fc9ba;
+    color: #000;
+}
+
+body.dark-mode .badge.phase-validation {
+    background-color: #cc7000;
+    color: #fff;
+}
+
+body.dark-mode .badge.phase-finalisation {
+    background-color: #a2b000;
+    color: #000;
+}
+
+body.dark-mode .badge.phase-garantie {
+    background-color: #455a64;
+    color: #fff;
+}
+
+body.dark-mode .badge.phase-tma {
+    background-color: #5d4037;
+    color: #fff;
+}
+
+body.dark-mode .badge.phase-provision {
+    background-color: #689f38;
+    color: #fff;
+}
+
+body.dark-mode .badge.bg-primary.ms-1 {
+    background-color: #00b9ff !important;
+    color: #000;
+}
+
+/* ===============================
+       Cartes "Projets récents
+   =============================== */
+
+body.dark-mode .recent-projects-card {
+    background-color: #003c5a;
+    color: #f0f0f0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6) !important;
+    border: 1px solid rgba(255,255,255,0.1);
+    transition: all 1s ease-in-out;
+}
+
+    body.dark-mode .recent-projects-card h3 {
+        color: #ffffff;
+    }
+
+body.dark-mode .recent-projects-table th {
+    color: #cccccc;
+    border-bottom: 2px solid rgba(255,255,255,0.1);
+}
+
+body.dark-mode .recent-projects-table td {
+    color: #e0e0e0;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+body.dark-mode .phase-tag,
+body.dark-mode span.phase-text {
+    background-color: #00b9ff;
+    color: #003c5a;
+}
+
+body.dark-mode .project-name .subtext {
+    color: #cccccc;
+}
+
+body.dark-mode .eye-icon {
+    filter: brightness(0.9);
+}
+
+    body.dark-mode .eye-icon:hover {
+        transform: rotate(180deg);
+    }
+
+
+/* ============================================================== */
 /*                              FOOTER                            */
 /* ============================================================== */
 
@@ -723,7 +1026,7 @@ span.phase-text {
 }
 
 .bottom-row.px-4 {
-    margin-top: auto;
+    margin-top: 2rem;
 }
 
 /* Contenu du footer */
@@ -775,178 +1078,1981 @@ span.phase-text {
     opacity: 0;
 }
 
+/* ============================================================== */
+/*                        DARK MODE - FOOTER                      */
+/* ============================================================== */
 
-
-/*#blazor-error-ui {
-    background: lightyellow;
-    bottom: 0;
-    box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
-    display: none;
-    left: 0;
-    padding: 0.6rem 1.25rem 0.7rem 1.25rem;
-    position: fixed;
-    width: 100%;
-    z-index: 1000;
+body.dark-mode .bottom-row.px-4 {
+    background-color: #2d2d30;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6) !important;
+    transition: all 1s ease-in-out;
 }
 
-    #blazor-error-ui .dismiss {
-        cursor: pointer;
-        position: absolute;
-        right: 0.75rem;
-        top: 0.5rem;
+body.dark-mode .footer-left p {
+    color: #f0f0f0;
+}
+
+body.dark-mode .footer-right a {
+    color: #d7d7d7;
+}
+
+    body.dark-mode .footer-right a:hover {
+        color: #00b9ff;
     }
 
-.content {
-    padding-top: 1.1rem;
+/* Conteneur et transitions */
+body.dark-mode .fade-container {
+    transition: opacity 0.3s ease;
 }
 
-h1:focus {
-    outline: none;
+body.dark-mode .fade-in {
+    opacity: 1;
 }
 
-.valid.modified:not([type=checkbox]) {
-    outline: 1px solid #26b050;
+body.dark-mode .fade-out {
+    opacity: 0;
 }
 
-.invalid {
-    outline: 1px solid #e50000;
+/* ============================================================== */
+/* ============================================================== */
+/*                           PAGE PROJETS                         */
+/* ============================================================== */
+/* ============================================================== */
+
+body button.nav-link {
+    color: #00b9ff;
 }
 
-.validation-message {
-    color: #e50000;
+body.dark-mode table.table {
+    color: #ffffff;
 }
 
-.blazor-error-boundary {
-    background: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTYiIGhlaWdodD0iNDkiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIG92ZXJmbG93PSJoaWRkZW4iPjxkZWZzPjxjbGlwUGF0aCBpZD0iY2xpcDAiPjxyZWN0IHg9IjIzNSIgeT0iNTEiIHdpZHRoPSI1NiIgaGVpZ2h0PSI0OSIvPjwvY2xpcFBhdGg+PC9kZWZzPjxnIGNsaXAtcGF0aD0idXJsKCNjbGlwMCkiIHRyYW5zZm9ybT0idHJhbnNsYXRlKC0yMzUgLTUxKSI+PHBhdGggZD0iTTI2My41MDYgNTFDMjY0LjcxNyA1MSAyNjUuODEzIDUxLjQ4MzcgMjY2LjYwNiA1Mi4yNjU4TDI2Ny4wNTIgNTIuNzk4NyAyNjcuNTM5IDUzLjYyODMgMjkwLjE4NSA5Mi4xODMxIDI5MC41NDUgOTIuNzk1IDI5MC42NTYgOTIuOTk2QzI5MC44NzcgOTMuNTEzIDI5MSA5NC4wODE1IDI5MSA5NC42NzgyIDI5MSA5Ny4wNjUxIDI4OS4wMzggOTkgMjg2LjYxNyA5OUwyNDAuMzgzIDk5QzIzNy45NjMgOTkgMjM2IDk3LjA2NTEgMjM2IDk0LjY3ODIgMjM2IDk0LjM3OTkgMjM2LjAzMSA5NC4wODg2IDIzNi4wODkgOTMuODA3MkwyMzYuMzM4IDkzLjAxNjIgMjM2Ljg1OCA5Mi4xMzE0IDI1OS40NzMgNTMuNjI5NCAyNTkuOTYxIDUyLjc5ODUgMjYwLjQwNyA1Mi4yNjU4QzI2MS4yIDUxLjQ4MzcgMjYyLjI5NiA1MSAyNjMuNTA2IDUxWk0yNjMuNTg2IDY2LjAxODNDMjYwLjczNyA2Ni4wMTgzIDI1OS4zMTMgNjcuMTI0NSAyNTkuMzEzIDY5LjMzNyAyNTkuMzEzIDY5LjYxMDIgMjU5LjMzMiA2OS44NjA4IDI1OS4zNzEgNzAuMDg4N0wyNjEuNzk1IDg0LjAxNjEgMjY1LjM4IDg0LjAxNjEgMjY3LjgyMSA2OS43NDc1QzI2Ny44NiA2OS43MzA5IDI2Ny44NzkgNjkuNTg3NyAyNjcuODc5IDY5LjMxNzkgMjY3Ljg3OSA2Ny4xMTgyIDI2Ni40NDggNjYuMDE4MyAyNjMuNTg2IDY2LjAxODNaTTI2My41NzYgODYuMDU0N0MyNjEuMDQ5IDg2LjA1NDcgMjU5Ljc4NiA4Ny4zMDA1IDI1OS43ODYgODkuNzkyMSAyNTkuNzg2IDkyLjI4MzcgMjYxLjA0OSA5My41Mjk1IDI2My41NzYgOTMuNTI5NSAyNjYuMTE2IDkzLjUyOTUgMjY3LjM4NyA5Mi4yODM3IDI2Ny4zODcgODkuNzkyMSAyNjcuMzg3IDg3LjMwMDUgMjY2LjExNiA4Ni4wNTQ3IDI2My41NzYgODYuMDU0N1oiIGZpbGw9IiNGRkU1MDAiIGZpbGwtcnVsZT0iZXZlbm9kZCIvPjwvZz48L3N2Zz4=) no-repeat 1rem/1.8rem, #b32121;
-    padding: 1rem 1rem 1rem 3.7rem;
+.card-header {
+    background: linear-gradient(90deg, #003c5a, #00b9ff);
+    color: #ffffff;
+}
+
+body.dark-mode div.card-body {
+    background-color: #2d2d30;
+    color: #ffffff;
+}
+
+body.dark-mode ul.nav.nav-tabs {
+    background-color: #2d2d30;
+    color: #ffffff;
+}
+
+body.dark-mode button.nav-link {
+    color: #00b9ff;
+}
+
+    body.dark-mode button.nav-link.active {
+        background-color: #003c5a;
+        color: #ffffff;
+    }
+
+* {
+    font-family: Montserrat;
+}
+
+body, html {
+    height: 100%;
+    margin: 0;
+    font-family: Montserrat;
+    /*    background-color: #f0f0f0;*/
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+    body,
+    body *:not(canvas) {
+        transition: background 1s ease, color 1s ease, border-color 1s ease, box-shadow 1s ease;
+    }
+
+        body.dark-mode {
+            background-color: #2d2d30;
+            color: #f0f0f0;
+        }
+
+div.top-row.px-4.dark-mode {
+    background-color: #2d2d30;
+    color: #f0f0f0;
+}
+
+/* Contenu principal */
+.main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    /*    margin-bottom: 2rem;*/
+}
+
+/* ============================================================== */
+/*                            THEME BUTTON                        */
+/* ============================================================== */
+#theme-toggle {
+    margin: 1rem;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    border: none;
+    background-color: #000;
+    color: #ffff;
+    font-size: 1.2rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 5px rgba(0,0,0.8,0);
+}
+
+    #theme-toggle:hover {
+        transform: scale(1.08);
+    }
+
+    #theme-toggle:active {
+        background-color: #444;
+        color: #ff0;
+    }
+
+/* ============================================================== */
+/*                       SCROLL TO TOP BUTTON                     */
+/* ============================================================== */
+
+.scroll-to-top {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    width: 50px;
+    height: 50px;
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    border-radius: 50%;
+    background-color: #003c5a;
+    border: 0.5px solid #00b9ff;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+    transition: all 0.5s ease-in-out;
+}
+
+    .scroll-to-top:hover {
+        transform: scale(1.05);
+    }
+
+    .scroll-to-top img {
+        width: 60%;
+        transition: filter 0.5s ease-in-out;
+    }
+
+    .scroll-to-top:hover img {
+        filter: brightness(0) invert(1);
+    }
+
+/* ============================================================== */
+/*                  DARK MODE - SCROLL TO TOP BUTTON              */
+/* ============================================================== */
+
+body.dark-mode .scroll-to-top {
+    background-color: #00b9ff;
+    border: 0.5px solid #003c5a;
+}
+
+    body.dark-mode .scroll-to-top img {
+        filter: brightness(0) invert(0);
+    }
+/* ============================================================== */
+/*                              HEADER                            */
+/* ============================================================== */
+
+div.top-row.px-4 {
+    display: flex;
+    position: relative;
+    background-color: #f0f0f0;
+    align-items: center;
+    justify-content: flex-start;
+    box-shadow: 10px 10px 15px rgba(0, 0, 0, 0.2) !important;
+    height: 4.8rem;
+    z-index: 10;
+    margin-bottom: 1rem;
+}
+
+    div.top-row.px-4 .container-fluid {
+        height: 100%;
+        display: flex;
+        align-items: center;
+        padding-top: 0;
+        padding-bottom: 0;
+    }
+
+    div.top-row.px-4 .top-left {
+        display: flex;
+        align-items: center;
+    }
+
+        div.top-row.px-4 .top-left::after {
+            content: "";
+            display: flex;
+            height: 2px;
+            width: 100px;
+            background-color: #B2B4B3;
+            margin-left: 20px;
+            box-shadow: 10px 10px 15px rgba(0, 0, 0, 0.8);
+        }
+
+    div.top-row.px-4 .right {
+        display: flex;
+        align-items: center;
+    }
+
+div.top-row.ps-3 {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #003c5a;
+    box-shadow: 10px 10px 15px rgba(0, 0, 0, 0.2) !important;
+    height: 4.8rem;
+}
+
+.search-bar {
+    position: relative;
+    display: flex;
+    align-items: center;
+    background: white;
+    border-radius: 20px;
+    overflow: hidden;
+    height: 2.2rem;
+    width: 220px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.8);
+}
+
+    .search-bar input {
+        border: none;
+        padding: 0.4rem 2rem 0.4rem 1rem;
+        outline: none;
+        font-size: 0.9rem;
+        flex: 1;
+    }
+
+img.account-icon {
+    height: 1.5rem;
+}
+
+
+/* ============================================================== */
+/*                       DARK MODE - SIDEBAR                      */
+/* ============================================================== */
+
+body.dark-mode div.top-row.ps-3 {
+    background-color: #2d2d30;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6) !important;
+    transition: background 1s ease, box-shadow 1s ease;
+}
+
+    body.dark-mode div.top-row.ps-3 a,
+    body.dark-mode div.top-row.ps-3 span,
+    body.dark-mode div.top-row.ps-3 i {
+        color: #e0e0e0 !important;
+        transition: color 1s ease;
+    }
+
+        body.dark-mode div.top-row.ps-3 a:hover,
+        body.dark-mode div.top-row.ps-3 i:hover {
+            color: #2d2d30 !important;
+        }
+
+/* ============================================================== */
+/*                        DARK MODE - HEADER                      */
+/* ============================================================== */
+
+body.dark-mode div.top-row.px-4 {
+    background-color: #2d2d30;
+    color: #f5f5f5;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6) !important;
+}
+
+
+/* ============================================================== */
+/*                          SIDEBAR                               */
+/* ============================================================== */
+
+.sidebar .nav-scrollable .nav-item > .nav-link {
+    display: flex !important;
+    align-items: center !important;
+    height: 3rem !important;
+    width: 100% !important;
+    color: #d7d7d7 !important;
+    background: none !important;
+    border: none !important;
+    border-radius: 4px !important;
+    padding-left: 0.75rem !important;
+    transition: all 0.2s ease !important;
+    font-weight: 500;
+    gap: 1rem;
+}
+
+    .sidebar .nav-scrollable .nav-item > .nav-link span {
+        margin-right: 10px;
+    }
+
+    /* Hover */
+    .sidebar .nav-scrollable .nav-item > .nav-link:hover {
+        color: #ffffff !important;
+        background-color: rgba(255, 255, 255, 0.1) !important;
+    }
+
+    /* Active */
+    .sidebar .nav-scrollable .nav-item > .nav-link.active {
+        color: #ffffff !important;
+        background-color: rgba(255, 255, 255, 0.2) !important;
+        border: 1px solid rgba(255, 255, 255, 0.5) !important;
+        border-radius: 6px !important;
+    }
+
+/* ============================================================== */
+/*                          STYLE DU LOGO                         */
+/* ============================================================== */
+
+.logo-container {
+    background-color: #00b9ff;
+    height: 4.7rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    padding: 0.5rem;
+}
+
+.logo-sidebar {
+    max-height: 60px;
+    width: auto;
+}
+
+/* ============================================================== */
+/*                        CONTAINER DES BOUTONS                   */
+/* ============================================================== */
+
+.buttons {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 25px;
+    margin: 20px;
+}
+
+/* Voir tous les projets */
+a.seeAllProjects, button.seeAllProjects {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 3em;
+    width: 250px;
+    background-color: #ffffff;
+    color: #00b9ff;
+    border-radius: 3px;
+    letter-spacing: 1px;
+    transition: all 0.2s linear;
+    cursor: pointer;
+    border: solid #00b9ff 1px;
+    text-decoration: none;
+}
+
+    a.seeAllProjects:hover, button.seeAllProjects:hover {
+        box-shadow: 9px 9px 33px #d1d1d1, -9px -9px 33px #ffffff;
+        transform: translateY(-2px);
+    }
+
+/* Nouveau projet */
+button.newProject {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 3em;
+    width: 250px;
+    background-color: #003c5a;
+    border-radius: 3px;
+    letter-spacing: 1px;
+    transition: all 0.2s linear;
+    cursor: pointer;
+    border: none;
+    color: #ffffff;
+}
+
+    /* SVG à l'intérieur du bouton */
+    button.newProject > svg {
+        margin-right: 5px;
+        font-size: 20px;
+        transition: all 0.4s ease-in;
+    }
+
+    button.newProject:hover > svg {
+        font-size: 1.2em;
+        transform: translateX(-5px);
+    }
+
+    button.newProject:hover {
+        box-shadow: 9px 9px 33px #d1d1d1, -9px -9px 33px #ffffff;
+        transform: translateY(-2px);
+    }
+
+/* ============================================================== */
+/*                          DARK MODE - BOUTONS                   */
+/* ============================================================== */
+
+/* Voir tous les projets */
+body.dark-mode a.seeAllProjects, button.seeAllProjects {
+    background-color: #2d2d30;
+    color: #ffffff;
+    border-color: #003c5a;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6) !important;
+}
+
+body.dark-mode button.newProject {
+    background-color: #003c5a;
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6) !important;
+}
+
+/* ============================================================== */
+/*                        MODAL NOUVEAU PROJET                    */
+/* ============================================================== */
+
+/* --- Overlay (fond flouté semi-transparent) --- */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: #f0f0f0;
+    backdrop-filter: blur(4px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1500;
+    animation: fadeIn 0.25s ease-out;
+}
+
+/* --- Conteneur principal du modal --- */
+.modal-container {
+    background: #ffffff;
+    border-radius: 12px;
+    border: none;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    width: 95%;
+    max-width: 900px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: scaleIn 0.25s ease-out;
+}
+
+.modal-content {
+    border: none;
+}
+
+/* --- Header --- */
+.modal-header {
+    background: linear-gradient(90deg, #003C5a, #00b9ff);
+    color: #fff;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.5rem;
+}
+
+    .modal-header h2 {
+        font-size: 1.25rem;
+        margin: 0;
+    }
+
+.close-btn {
+    background: transparent url("/icons8-close-window-48.png") center/32px 32px no-repeat;
+    border: none;
+    width: 34px;
+    height: 34px;
+    opacity: 1;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+    color: transparent;
+    overflow: hidden;
+}
+
+    .close-btn:hover {
+        transform: scale(1.1);
+        transition: transform 0.2s ease, opacity 0.2s ease;
+    }
+
+
+/* --- Corps du modal --- */
+.modal-body {
+    padding: 1.5rem;
+    background: #fff;
+}
+
+    .modal-body label {
+        display: block;
+        font-weight: 600;
+        color: #333;
+        margin-top: 1rem;
+        margin-bottom: 0.3rem;
+    }
+
+    .modal-body input,
+    .modal-body select {
+        width: 100%;
+        padding: 0.6rem;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        transition: border-color 0.2s;
+        font-size: 0.95rem;
+    }
+
+        .modal-body input:focus,
+        .modal-body select:focus {
+            outline: none;
+            border-color: #0078d7;
+        }
+
+/* --- Layout des champs groupés --- */
+.form-row {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+    .form-row > div {
+        flex: 1;
+    }
+
+/* --- Footer --- */
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    padding: 1rem 1.5rem;
+    border-top: 1px solid #eee;
+    background: #fafafa;
+}
+
+/* --- Boutons --- */
+.btn-primary {
+    background-color: #003c5a;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 0.6rem 1.2rem;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background 0.2s;
+}
+
+    .btn-primary:hover {
+        background-color: #00b9ff;
+    }
+
+.btn-secondary {
+    background: #f3f3f3;
+    color: #333;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 0.6rem 1.2rem;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+    .btn-secondary:hover {
+        background: #e0e0e0;
+    }
+
+.modal-overlay {
+    animation: fadeIn 0.2s ease forwards;
+}
+
+.modal-container {
+    animation: scaleIn 0.2s ease forwards;
+}
+
+/* Classes pour la fermeture */
+.modal-overlay.close {
+    animation: fadeOut 0.4s ease forwards;
+}
+
+.modal-container.close {
+    animation: scaleOut 0.4s ease forwards;
+}
+
+
+/* --- Animations --- */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes scaleIn {
+    from {
+        transform: scale(0.9);
+        opacity: 0;
+    }
+
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+@keyframes fadeOut {
+    from {
+        opacity: 1;
+    }
+
+    to {
+        opacity: 0;
+    }
+}
+
+@keyframes scaleOut {
+    from {
+        transform: scale(1);
+        opacity: 1;
+    }
+
+    to {
+        transform: scale(0.9);
+        opacity: 0;
+    }
+}
+
+/* ============================================================== */
+/*                  DARK MODE - MODAL NOUVEAU PROJET              */
+/* ============================================================== */
+
+body.dark-mode .modal-overlay {
+    background: rgba(0, 28, 43, 0.85);
+    backdrop-filter: blur(4px);
+}
+
+body.dark-mode .modal-container {
+    background: #2d2d30;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+
+body.dark-mode .modal-header {
+    background: linear-gradient(90deg, #2d2d30, #003c5a);
+    color: #f0f0f0;
+}
+
+body.dark-mode .modal-body {
+    background: #2d2d30;
+    color: #e0e0e0;
+}
+
+    body.dark-mode .modal-body label {
+        color: #f0f0f0;
+    }
+
+    body.dark-mode .modal-body input,
+    body.dark-mode .modal-body select {
+        background-color: #2d2d30;
+        border: 1px solid #00b9ff;
+        color: #f0f0f0;
+    }
+
+        body.dark-mode .modal-body input:focus,
+        body.dark-mode .modal-body select:focus {
+            border-color: #00b9ff;
+        }
+
+body.dark-mode .modal-footer {
+    background: #2d2d30;
+    border-top: 1px solid #00b9ff;
+}
+
+body.dark-mode .btn-primary {
+    background-color: #004466;
+    color: #f0f0f0;
+}
+
+    body.dark-mode .btn-primary:hover {
+        background-color: #0078d7;
+    }
+
+body.dark-mode .btn-secondary {
+    background-color: #004466;
+    color: #f0f0f0;
+    border: 1px solid #00b9ff;
+}
+
+    body.dark-mode .btn-secondary:hover {
+        background-color: #005580;
+    }
+
+/* ============================================================== */
+/*                   CANVAS + CARTE NOTIFICATIONS                 */
+/* ============================================================== */
+
+.dashboard-section {
+    width: 100%;
+    max-width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 2rem;
+    flex-wrap: wrap;
+    margin: 2rem 0 0 0;
+    padding: 0 1rem;
+    box-sizing: border-box;
+}
+
+/* Carte du graphique */
+.chart-card {
+    flex: 1 1 calc(100% - 350px - 2rem);
+    min-width: 350px;
+    max-width: 100%;
+    background: #fff;
+    border-radius: 16px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    box-sizing: border-box;
+}
+
+.chart-area {
+    width: 100%;
+    height: 32rem;
+    display: flex;
+    flex-direction: column;
+}
+
+    .chart-area h4.chart-title {
+        margin: 0 0 1rem 0;
+        font-size: 1.2rem;
+        color: #333;
+        text-align: center;
+    }
+
+    .chart-area canvas {
+        height: calc(100% - 2rem) !important;
+        width: 100% !important;
+    }
+
+/* Notifications à droite */
+.notifications-card {
+    flex: 0 0 350px;
+    min-width: 350px;
+    background: #fff;
+    border-radius: 16px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    box-sizing: border-box;
+}
+
+    .notifications-card h4 {
+        margin-top: 0;
+    }
+
+    .notifications-card ul {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .notifications-card li {
+        margin-bottom: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+@media (max-width: 900px) {
+    .dashboard-section {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .chart-card,
+    .notifications-card {
+        flex: 1 1 auto;
+        min-width: 100%;
+        max-width: 100%;
+    }
+
+    .chart-area {
+        height: 300px;
+    }
+}
+
+@media (max-width: 600px) {
+    .chart-card {
+        padding: 1rem;
+    }
+
+    .chart-area {
+        height: 250px;
+    }
+
+    .chart-card h4 {
+        font-size: 1rem;
+    }
+
+    .notifications-card {
+        padding: 1rem;
+        min-width: 100%;
+    }
+}
+/* ============================================================== */
+/*                 DARK MODE - CANVAS + CARD NOTIFS               */
+/* ============================================================== */
+
+body.dark-mode .chart-card,
+body.dark-mode .notifications-card {
+    background: #003c5a;
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6) !important;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+body.dark-mode .chart-area h4.chart-title {
+    color: #ffffff;
+}
+
+body.dark-mode .notifications-card ul li {
+    color: #e0e0e0;
+}
+
+/* ============================================================== */
+/*                       TABLEAU PROJETS RECENTS                  */
+/* ============================================================== */
+
+/* === Couleurs personnalisées pour les phases === */
+.badge.phase-pilotage {
+    background-color: #006d55;
     color: white;
 }
 
-    .blazor-error-boundary::after {
-        content: "An error has occurred."
+.badge.phase-conception {
+    background-color: #009581;
+    color: white;
+}
+
+.badge.phase-construction {
+    background-color: #a1e7d7;
+    color: white;
+}
+
+.badge.phase-validation {
+    background-color: #e98300;
+    color: white;
+}
+
+.badge.phase-finalisation {
+    background-color: #bed600;
+    color: white;
+}
+
+.badge.phase-garantie {
+    background-color: #607d8b;
+    color: white;
+}
+
+.badge.phase-tma {
+    background-color: #795548;
+    color: white;
+}
+
+.badge.phase-provision {
+    background-color: #8bc34a;
+    color: white;
+}
+
+.badge.bg-primary.ms-1 {
+    background-color: #00b6ff !important;
+    color: white;
+}
+
+/*-------- Cartes --------*/
+.recent-projects-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    padding: 1.5rem;
+    margin-top: 2rem;
+    margin-bottom: 2rem;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+    .recent-projects-card h3 {
+        margin-bottom: 1rem;
+        font-size: 1.3rem;
+        font-weight: 600;
     }
 
-.darker-border-checkbox.form-check-input {
-    border-color: #929292;
-}*/
-/* Colonnes du tableau Achats */
-
-/*.col_quanti {
-    max-width: 70px;*/ /* plus etroite */
-/*width: 70px;
-    text-align: right;
+.recent-projects-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    font-size: 0.95rem;
 }
 
-.col_type {
-    max-width: 200px;
-    width: 200px;
-    text-align: right;
-}*/
-/* === Cartes identiques (header/paddings) === */
-/*.equal-card .card-header {
-    min-height: 48px;
-    padding-top: .5rem;
-    padding-bottom: .5rem;
+    .recent-projects-table th {
+        color: #666;
+        font-weight: 600;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid #eee;
+    }
+
+    .recent-projects-table td {
+        padding: 0.75rem 0;
+        border-bottom: 1px solid #f1f1f1;
+    }
+
+.phase-tag {
+    background-color: #003c5a;
+    color: white;
+    font-size: 0.8rem;
+    padding: 0.3rem 0.6rem;
+    border-radius: 10px;
 }
 
-.equal-card .card-body {
-    padding: 0;
-}*/
+.project-name .subtext {
+    font-size: 0.8rem;
+    color: #999;
+}
 
-/* === Tables stables et alignees === */
-/*.equal-table {
+.eye-icon {
+    width: 1.4rem;
+    cursor: pointer;
+    transition: all 0.3s ease 0s;
+}
+
+    .eye-icon:hover {
+        transform: rotate(180deg);
+    }
+
+span.phase-text {
+    background-color: #003c5a;
+    border-radius: 15px;
+    padding: 8px;
+    color: white;
+}
+
+@media (max-width: 768px) {
+    .recent-projects-table, .recent-projects-table thead, .recent-projects-table tbody, .recent-projects-table th, .recent-projects-table td, .recent-projects-table tr {
+        display: block;
+    }
+
+        .recent-projects-table tr {
+            margin-bottom: 1rem;
+            border-bottom: 2px solid #eee;
+        }
+
+        .recent-projects-table td {
+            position: relative;
+        }
+
+            .recent-projects-table td::before {
+                content: attr(data-label);
+                position: absolute;
+                left: 0;
+                width: 50%;
+                padding-left: 0.75rem;
+                font-weight: 600;
+                text-align: left;
+            }
+}
+
+/* ============================================================== */
+/*                 DARK MODE - TABLEAU PROJETS RECENTS            */
+/* ============================================================== */
+
+/* ===============================
+             Badges phases
+   =============================== */
+
+body.dark-mode .badge.phase-pilotage {
+    background-color: #004d3d;
+    color: #fff;
+}
+
+body.dark-mode .badge.phase-conception {
+    background-color: #007a62;
+    color: #fff;
+}
+
+body.dark-mode .badge.phase-construction {
+    background-color: #5fc9ba;
+    color: #000;
+}
+
+body.dark-mode .badge.phase-validation {
+    background-color: #cc7000;
+    color: #fff;
+}
+
+body.dark-mode .badge.phase-finalisation {
+    background-color: #a2b000;
+    color: #000;
+}
+
+body.dark-mode .badge.phase-garantie {
+    background-color: #455a64;
+    color: #fff;
+}
+
+body.dark-mode .badge.phase-tma {
+    background-color: #5d4037;
+    color: #fff;
+}
+
+body.dark-mode .badge.phase-provision {
+    background-color: #689f38;
+    color: #fff;
+}
+
+body.dark-mode .badge.bg-primary.ms-1 {
+    background-color: #00b9ff !important;
+    color: #000;
+}
+
+/* ===============================
+       Cartes "Projets récents
+   =============================== */
+
+body.dark-mode .recent-projects-card {
+    background-color: #2d2d30;
+    color: #f0f0f0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6) !important;
+    border: 1px solid rgba(255,255,255,0.1);
+    transition: all 1s ease-in-out;
+}
+
+    body.dark-mode .recent-projects-card h3 {
+        color: #ffffff;
+    }
+
+body.dark-mode .recent-projects-table th {
+    color: #cccccc;
+    border-bottom: 2px solid rgba(255,255,255,0.1);
+}
+
+body.dark-mode .recent-projects-table td {
+    color: #e0e0e0;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+body.dark-mode .phase-tag,
+body.dark-mode span.phase-text {
+    background-color: #00b9ff;
+    color: #003c5a;
+}
+
+body.dark-mode .project-name .subtext {
+    color: #cccccc;
+}
+
+body.dark-mode .eye-icon {
+    filter: brightness(0.9);
+}
+
+    body.dark-mode .eye-icon:hover {
+        transform: rotate(180deg);
+    }
+
+
+/* ============================================================== */
+/*                              FOOTER                            */
+/* ============================================================== */
+
+.bottom-row.px-4 {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    height: 4.8rem;
+    width: 100%;
+    background-color: #ffffff;
+    box-shadow: 0 -4px 10px rgba(0,0,0,0.15);
+}
+
+.bottom-row.px-4 {
+    margin-top: 2rem;
+}
+
+/* Contenu du footer */
+.footer-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    padding: 0 1.5rem;
+    font-size: 0.9rem;
+    flex-wrap: wrap;
+}
+
+/* Partie gauche */
+.footer-left p {
+    margin: 0;
+    color: #333;
+    font-weight: 500;
+}
+
+/* Partie droite */
+.footer-right {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+    .footer-right a {
+        color: black;
+        text-decoration: none;
+        font-weight: 500;
+        transition: color 0.2s ease-in-out;
+    }
+
+        .footer-right a:hover {
+            color: #00b9ff;
+        }
+
+.fade-container {
+    transition: opacity 0.3s ease;
+}
+
+.fade-in {
+    opacity: 1;
+}
+
+.fade-out {
+    opacity: 0;
+}
+
+/* ============================================================== */
+/*                        DARK MODE - FOOTER                      */
+/* ============================================================== */
+
+body.dark-mode .bottom-row.px-4 {
+    background-color: #2d2d30;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6) !important;
+    transition: all 1s ease-in-out;
+}
+
+body.dark-mode .footer-left p {
+    color: #f0f0f0;
+}
+
+body.dark-mode .footer-right a {
+    color: #d7d7d7;
+}
+
+    body.dark-mode .footer-right a:hover {
+        color: #00b9ff;
+    }
+
+/* Conteneur et transitions */
+body.dark-mode .fade-container {
+    transition: opacity 0.3s ease;
+}
+
+body.dark-mode .fade-in {
+    opacity: 1;
+}
+
+body.dark-mode .fade-out {
+    opacity: 0;
+}
+
+/* ============================================================== */
+/* ============================================================== */
+/*                           PAGE PROJETS                         */
+/* ============================================================== */
+/* ============================================================== */
+
+body button.nav-link {
+    color: #00b9ff;
+}
+
+body.dark-mode table.table {
+    color: #ffffff;
+}
+
+.card-header {
+    background: linear-gradient(90deg, #003c5a, #00b9ff);
+    color: #ffffff;
+}
+
+body.dark-mode div.card-body {
+    background-color: #2d2d30;
+    color: #ffffff;
+}
+
+body.dark-mode ul.nav.nav-tabs {
+    background-color: #2d2d30;
+    color: #ffffff;
+}
+
+body.dark-mode button.nav-link {
+    color: #00b9ff;
+}
+
+    body.dark-mode button.nav-link.active {
+        background-color: #003c5a;
+        color: #ffffff;
+    }
+
+/* ============================================================== */
+/*                              RESPONSIVE                        */
+/* ============================================================== */
+
+/* ================= (Mobile) ==================== */
+@media (max-width: 640px) {
+
+    /* --- HEADER (top-row.px-4) --- */
+    div.top-row.px-4 {
+        height: auto;
+        min-height: 3.5rem;
+        padding: 0.5rem 1rem !important;
+        flex-direction: column;
+        align-items: flex-start !important;
+        gap: 0.75rem;
+        justify-content: center;
+    }
+
+        div.top-row.px-4 .container-fluid {
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            padding: 0;
+        }
+
+    /* Dashboard + SearchBar */
+    .top-left {
+        width: 100%;
+        display: flex;
+        justify-content: center !important;
+        text-align: center;
+        align-items: center;
+    }
+
+        .top-left h3 {
+            font-size: 1.2rem;
+            margin: 0;
+        }
+
+    /* Masquer la ligne décorative sur mobile */
+    div.top-row.px-4 .top-left::after {
+        display: none;
+    }
+
+    /* SearchBar à droite du titre */
+    .top-right {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        gap: 0.75rem;
+    }
+
+    /* Barre de recherche compacte */
+    .search-bar {
+        width: 140px;
+        height: 2rem;
+        margin-left: auto;
+    }
+
+        .search-bar input {
+            font-size: 0.75rem;
+            padding: 0.3rem 1.5rem 0.3rem 0.8rem;
+        }
+
+    /* UserBadge sous le titre - Style carte */
+    .top-right > span {
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem 1rem;
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border-radius: 10px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+        animation: slideDown 0.3s ease-out;
+    }
+
+    /* Icône compte */
+    img.account-icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        border: 2px solid #00b9ff;
+        box-shadow: 0 2px 4px rgba(0, 185, 255, 0.3);
+    }
+
+    /* Dark mode pour le badge */
+    body.dark-mode .top-right > span {
+        background: linear-gradient(135deg, #003c5a 0%, #004d6d 100%);
+        border: 1px solid rgba(0, 185, 255, 0.3);
+    }
+
+    body.dark-mode .top-right .user-name {
+        color: #f0f0f0;
+    }
+
+    body.dark-mode .top-right .user-email {
+        color: #b0b0b0;
+    }
+
+    /* Bouton thème plus petit */
+    #theme-toggle {
+        width: 35px;
+        height: 35px;
+        font-size: 0.9rem;
+        margin: 0.25rem;
+    }
+
+    /* --- LOGO --- */
+    .logo-container {
+        height: 3.5rem;
+        padding: 0.3rem;
+    }
+
+    .logo-sidebar {
+        max-height: 40px;
+    }
+
+    /* --- SIDEBAR --- */
+    div.top-row.ps-3 {
+        height: 3.5rem;
+    }
+
+    /* --- BOUTONS --- */
+    .buttons {
+        flex-direction: column;
+        gap: 15px;
+        margin: 15px 10px;
+    }
+
+    a.seeAllProjects,
+    button.seeAllProjects,
+    button.newProject {
+        width: 100%;
+        max-width: 300px;
+    }
+
+    /* --- FOOTER --- */
+    .bottom-row.px-4 {
+        height: auto;
+        min-height: 3.5rem;
+        padding: 1rem !important;
+    }
+
+    .footer-content {
+        flex-direction: column;
+        gap: 0.5rem;
+        text-align: center;
+    }
+
+    .footer-left,
+    .footer-right {
+        width: 100%;
+        justify-content: center;
+    }
+
+    /* --- SCROLL TO TOP --- */
+    .scroll-to-top {
+        width: 45px;
+        height: 45px;
+        bottom: 20px;
+        right: 20px;
+    }
+
+    /* --- DASHBOARD --- */
+    .dashboard-section {
+        margin: 1rem 0 0 0;
+        padding: 0 0.5rem;
+        gap: 1rem;
+    }
+
+    .chart-card,
+    .notifications-card {
+        padding: 1rem;
+    }
+
+    .chart-area {
+        height: 250px;
+    }
+
+        .chart-area h4.chart-title {
+            font-size: 1rem;
+        }
+}
+
+/* Animation pour le badge */
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ================= TABLETTES ======================== */
+@media (min-width: 641px) and (max-width: 768px) {
+
+    div.top-row.px-4 {
+        height: auto;
+        min-height: 4rem;
+        flex-direction: column;
+        align-items: flex-start !important;
+        padding: 1rem !important;
+        gap: 0.75rem;
+    }
+
+    /* Dashboard + SearchBar */
+    .top-left {
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+        .top-left h3 {
+            font-size: 1.3rem;
+        }
+
+    div.top-row.px-4 .top-left::after {
+        display: none;
+    }
+
+    .top-right {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        gap: 0.75rem;
+    }
+
+    /* Barre de recherche */
+    .search-bar {
+        width: 180px;
+        margin-left: auto;
+    }
+
+    .top-right > span {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem 1rem;
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border-radius: 10px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    img.account-icon {
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        border: 2px solid #00b9ff;
+    }
+
+    /* Dark mode */
+    body.dark-mode .top-right > span {
+        background: linear-gradient(135deg, #003c5a 0%, #004d6d 100%);
+        border: 1px solid rgba(0, 185, 255, 0.3);
+    }
+
+    /* Bouton thème */
+    #theme-toggle {
+        width: 45px;
+        height: 45px;
+        margin: 0.75rem;
+    }
+
+    /* --- LOGO --- */
+    .logo-container {
+        height: 4rem;
+    }
+
+    .logo-sidebar {
+        max-height: 50px;
+    }
+
+    div.top-row.ps-3 {
+        height: 4rem;
+    }
+
+    /* --- BOUTONS --- */
+    .buttons {
+        gap: 20px;
+        flex-wrap: wrap;
+    }
+
+    a.seeAllProjects,
+    button.seeAllProjects,
+    button.newProject {
+        width: 220px;
+    }
+
+    /* --- DASHBOARD --- */
+    .dashboard-section {
+        gap: 1.5rem;
+    }
+
+    .chart-area {
+        height: 350px;
+    }
+}
+
+/* ================= TABLETTES + DESKTOP (>768px) ============== */
+@media (min-width: 769px) and (max-width: 900px) {
+
+    div.top-row.px-4 {
+        height: 4.2rem;
+        flex-direction: row;
+        justify-content: space-between;
+    }
+
+        div.top-row.px-4 .top-left::after {
+            width: 60px;
+            margin-left: 15px;
+        }
+
+    .top-right {
+        flex-direction: row;
+        width: auto;
+        gap: 1rem;
+    }
+
+    .search-bar {
+        width: 180px;
+    }
+
+    .top-right > span {
+        background: none;
+        padding: 0;
+        box-shadow: none;
+        border-radius: 0;
+    }
+
+    img.account-icon {
+        width: auto;
+        height: 1.5rem;
+        border: none;
+        box-shadow: none;
+    }
+}
+
+/* ================= GRANDS ÉCRANS =================== */
+@media (min-width: 901px) {
+
+    /* Comportement normal du header */
+    div.top-row.px-4 {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .top-right {
+        flex-direction: row;
+        width: auto;
+        gap: 1rem;
+    }
+
+        .top-right > span {
+            background: none;
+            padding: 0;
+            box-shadow: none;
+            border-radius: 0;
+        }
+
+    img.account-icon {
+        width: auto;
+        height: 1.5rem;
+        border: none;
+        box-shadow: none;
+    }
+}
+
+@media (min-width: 1200px) {
+
+    div.top-row.px-4 .container-fluid {
+        padding-left: 2rem;
+        padding-right: 2rem;
+    }
+
+    .search-bar {
+        width: 280px;
+    }
+
+    .dashboard-section {
+        max-width: 1400px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+}
+
+/* ================= TRÈS PETITS ÉCRANS ======================== */
+@media (max-width: 480px) {
+
+    div.top-row.px-4 {
+        min-height: 3rem;
+        padding: 0.5rem 0.75rem !important;
+        gap: 0.5rem;
+    }
+
+    .top-left h3 {
+        font-size: 1.1rem;
+    }
+
+    .search-bar {
+        width: 100px;
+    }
+
+        .search-bar input::placeholder {
+            font-size: 0.7rem;
+        }
+
+    .top-right > span {
+        padding: 0.6rem 0.75rem;
+    }
+
+    img.account-icon {
+        width: 32px;
+        height: 32px;
+    }
+
+    .top-right .user-name {
+        font-size: 0.85rem;
+    }
+
+    .top-right .user-email {
+        font-size: 0.75rem;
+    }
+
+    #theme-toggle {
+        width: 32px;
+        height: 32px;
+        font-size: 0.8rem;
+        margin: 0.2rem;
+    }
+
+    .logo-container {
+        height: 3rem;
+        padding: 0.2rem;
+    }
+
+    .logo-sidebar {
+        max-height: 35px;
+    }
+
+    .recent-projects-card {
+        padding: 1rem;
+        margin-top: 1rem;
+        margin-bottom: 1rem;
+    }
+
+        .recent-projects-card h3 {
+            font-size: 1.1rem;
+        }
+
+    .recent-projects-table {
+        font-size: 0.85rem;
+    }
+}
+
+/* ============================================================== */
+/*                        NAVBAR TOGGLER                          */
+/* ============================================================== */
+
+@media (max-width: 640px) {
+
+    .navbar-toggler {
+        width: 3rem;
+        height: 2.2rem;
+        top: 0.65rem;
+        right: 0.75rem;
+    }
+
+    .sidebar {
+        position: fixed;
+        top: 3.5rem;
+        left: 0;
+        width: 100%;
+        max-width: 280px;
+        height: calc(100vh - 3.5rem);
+        z-index: 999;
+        transform: translateX(-100%);
+        transition: transform 0.3s ease-in-out;
+    }
+
+    .navbar-toggler:checked ~ .sidebar {
+        transform: translateX(0);
+    }
+
+    .navbar-toggler:checked::before {
+        content: '';
+        position: fixed;
+        top: 3.5rem;
+        left: 0;
+        width: 100%;
+        height: calc(100vh - 3.5rem);
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 998;
+    }
+}
+
+/* ============================================================== */
+/*                       MODAL RESPONSIVE                         */
+/* ============================================================== */
+
+@media (max-width: 640px) {
+
+    .modal-container {
+        width: 98%;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+
+    .modal-header {
+        padding: 0.75rem 1rem;
+    }
+
+        .modal-header h2 {
+            font-size: 1.1rem;
+        }
+
+    .modal-body {
+        padding: 1rem;
+    }
+
+        .modal-body label {
+            font-size: 0.9rem;
+            margin-top: 0.75rem;
+        }
+
+        .modal-body input,
+        .modal-body select {
+            font-size: 0.9rem;
+            padding: 0.5rem;
+        }
+
+    .form-row {
+        flex-direction: column;
+        gap: 0;
+    }
+
+    .modal-footer {
+        padding: 0.75rem 1rem;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .btn-primary,
+    .btn-secondary {
+        width: 100%;
+        padding: 0.6rem;
+    }
+}
+
+/* ============================================================== */
+/*                       ORIENTATION PAYSAGE                      */
+/* ============================================================== */
+
+@media (max-width: 900px) and (orientation: landscape) {
+
+    div.top-row.px-4 {
+        min-height: 3rem;
+        padding: 0.5rem 1rem !important;
+    }
+
+    div.top-row.ps-3 {
+        height: 3rem;
+        min-height: 3rem;
+    }
+
+    .logo-container {
+        height: 3rem;
+    }
+
+    .logo-sidebar {
+        max-height: 35px;
+    }
+
+    .chart-area {
+        height: 300px;
+    }
+
+    .sidebar {
+        height: calc(100vh - 3rem);
+    }
+
+    .nav-scrollable {
+        height: calc(100vh - 3rem);
+    }
+
+    .top-right > span {
+        padding: 0.5rem 0.75rem;
+    }
+
+    img.account-icon {
+        width: 32px;
+        height: 32px;
+    }
+}
+
+body.dark-mode card-body {
+    background-color: #2d2d30;
+}
+
+body.dark-mode table > :not(caption) > * > * {
+    background-color: #2d2d30;
+    color: #ffffff;
+}
+
+body.dark-mode td {
+    color: #ffffff;
+}
+
+body.dark-mode .card.shadow-sm {
+    background-color: #2d2d30;
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.9) !important;
+}
+
+.fixed-table {
     table-layout: fixed;
     width: 100%;
 }
 
-.equal-nowrap thead th,
-.equal-nowrap tbody td {
-    white-space: nowrap;
-    vertical-align: middle;
-}*/
-
-/* === Hauteur de LIGNE identique pour les deux tableaux === */
-/*.equal-rows .table-sm th,
-.equal-rows .table-sm td {
-    padding-top: .62rem;*/ /* ~31px de hauteur totale avec .table-sm */
-/*padding-bottom: .62rem;
-}*/
-
-/* === Colonne "action" compacte (évite de faire gonfler la ligne) === */
-/*.table-action {
-    padding-top: .25rem !important;
-    padding-bottom: .25rem !important;
-    white-space: nowrap;
-    width: 44px;*/ /* largeur fixe de la colonne bouton */
-/*}
-
-.btn-cell {
-    width: 31px;*/ /* ≈ hauteur d’un input .form-control-sm */
-/*height: 31px;
-    padding: 0;
-    line-height: 1;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: .95rem;
-}*/
-
-/* === Vision FAE : colonnes plus étroites + titres sur 2 lignes si besoin === */
-/*.fae-table thead th {
-    white-space: normal;
-    line-height: 1.15;
-    font-size: .95rem;
+.wl-col-actions {
+    width: 2.5rem;
 }
 
-    .fae-table thead th:nth-child(1) {
-        width: 140px;
-    }*/
-/* Cout engagu cumule */
-/*.fae-table thead th:nth-child(2) {
-        width: 140px;
-    }*/
-/* Montant facture cumule */
-/*.fae-table thead th:nth-child(3) {
-        width: 140px;
-    }*/
-/* Montant FAE (€) */
-/*.fae-table thead th:nth-child(4) {
-        width: 110px;
-    }
-
-.equal-rows .fae-table th,
-.equal-rows .fae-table td {
-    padding-top: .70rem;*/ /* ajuste ici */
-/*padding-bottom: .70rem;
-}*/
-
-/* Hauteur de la ligne d'en-tete du tableau echeancier */
-/*.thead-eche th {
-    padding-top: .250rem;*/ /* augmente si tu veux encore plus haut */
-/*padding-bottom: .75rem;
-}*/
-/* Forcer la hauteur de l'entete Echeancier malgre .equal-rows */
-/*.equal-rows thead.thead-eche th {
-    padding-top: .99rem !important;
-    padding-bottom: .97rem !important;
-}*/
-/* FAE uniquement : hauteur des lignes (body) */
-/*.equal-rows table.fae-table.table-sm tbody td {
-    padding-top: .83rem;
-    padding-bottom: .86rem;
-}*/
-/* FAE uniquement : hausse la hauteur des lignes du BODY */
-/*table.fae-table.table-sm tbody td {
-    padding-top: .7rem !important;
-    padding-bottom: .95rem !important;
-<<<<<<< HEAD
-}*/
-=======
+.wl-col-id {
+    width: 2rem;
+    min-width: 1.5rem;
+    max-width: 6.5rem;
 }
 
+.wl-col-lot {
+    width: 8rem;
+    min-width: 6rem;
+}
 
+.wl-col-phase {
+    width: 10rem;
+    min-width: 8rem;
+}
 
-/* ===== Workload header — bandes colorées façon Excel (global, ciblé par .wl-table) ===== */
+.wl-col-etape {
+    width: 10rem;
+    min-width: 9rem;
+}
+
+.wl-col-tache {
+    width: 20rem;
+    min-width: 18rem;
+}
+
+.wl-col-total-jh {
+    width: 7rem;
+}
+
+.wl-col-total-eu {
+    width: 11rem;
+}
+
+.wl-col-profile-jh {
+    width: 6.5rem;
+}
+
+.wl-col-profile-eu {
+    width: 8rem;
+}
+
+.wl-col-livrable {
+    width: 14rem;
+}
+
+.wl-col-comment {
+    width: 18rem;
+    min-width: 12rem;
+}
+
+/*Lignes de couleurs*/
+/* ==== Couleurs par PHASE (lignes du tbody) ==== */
+.wl-ph-pilotage {
+    background-color: #e3f2fd;
+}
+/* bleu clair */
+.wl-ph-conception {
+    background-color: #e0f7fa;
+}
+/* cyan très clair */
+.wl-ph-construction {
+    background-color: #e8f5e9;
+}
+/* vert très clair */
+.wl-ph-validation {
+    background-color: #fff9c4;
+}
+/* jaune très clair */
+.wl-ph-finalisation {
+    background-color: #ffe0b2;
+}
+/* pêche très clair */
+.wl-ph-garantie {
+    background-color: #f3e5f5;
+}
+/* violet très clair */
+.wl-ph-tma {
+    background-color: #fce4ec;
+}
+/* rose très clair */
+.wl-ph-provision {
+    background-color: #eeeeee;
+}
+/* gris clair */
+
+/* parent = un peu plus “fort” visuellement */
+.wl-parent > td {
+    font-weight: 600;
+}
+
+/* inputs lisibles sur fond coloré */
+.wl-table tbody tr[class^="wl-ph-"] input,
+.wl-table tbody tr[class*=" wl-ph-"] input {
+    background-color: transparent;
+}
+/* Parent toujours bleu (plus foncé) */
+.wl-table tbody tr.wl-parent > td {
+    background-color: #6495ED !important; /* bleu style Bootstrap .table-primary */
+    font-weight: 600;
+}
+
+/* Option: un peu plus de contraste au survol */
+.wl-table tbody tr.wl-parent:hover > td {
+    background-color: #bdd6ff !important;
+}
+
+/* Inputs lisibles sur fond parent bleu */
+.wl-table tbody tr.wl-parent input {
+    background-color: transparent;
+}
+
+body.dark-mode .wl-table tbody tr[class^="wl-ph-"] input, .wl-table tbody tr[class*=" wl-ph-"] input {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+}
+/* ===== Workload header – bandes colorées façon Excel (global, ciblé par .wl-table) ===== */
 
 /* Base header */
 .wl-table thead th {
@@ -1012,65 +3118,37 @@ h1:focus {
     opacity: .8;
 }
 
-
-/*Lignes de couleurs*/
-/* ==== Couleurs par PHASE (lignes du tbody) ==== */
-.wl-ph-pilotage {
-    background-color: #e3f2fd;
-}
-/* bleu clair */
-.wl-ph-conception {
-    background-color: #e0f7fa;
-}
-/* cyan très clair */
-.wl-ph-construction {
-    background-color: #e8f5e9;
-}
-/* vert très clair */
-.wl-ph-validation {
-    background-color: #fff9c4;
-}
-/* jaune très clair */
-.wl-ph-finalisation {
-    background-color: #ffe0b2;
-}
-/* pêche très clair */
-.wl-ph-garantie {
-    background-color: #f3e5f5;
-}
-/* violet très clair */
-.wl-ph-tma {
-    background-color: #fce4ec;
-}
-/* rose très clair */
-.wl-ph-provision {
-    background-color: #eeeeee;
-}
-/* gris clair */
-
-/* parent = un peu plus “fort” visuellement */
-.wl-parent > td {
-    font-weight: 600;
+/*.fixed-table th,
+.fixed-table td {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: middle;
 }
 
-/* inputs lisibles sur fond coloré */
-.wl-table tbody tr[class^="wl-ph-"] input,
-.wl-table tbody tr[class*=" wl-ph-"] input {
-    background-color: transparent;
-}
-/* Parent toujours bleu (plus foncé) */
-.wl-table tbody tr.wl-parent > td {
-    background-color: #6495ED !important; /* bleu style Bootstrap .table-primary */
-    font-weight: 600;
+.fixed-table .wl-input,
+.fixed-table input.form-control {
+    width: 100%;
+    box-sizing: border-box;
 }
 
-/* Option: un peu plus de contraste au survol */
-.wl-table tbody tr.wl-parent:hover > td {
-    background-color: #bdd6ff !important;
+.wl-wrap {
+    overflow-x: auto;
 }
 
-/* Inputs lisibles sur fond parent bleu */
-.wl-table tbody tr.wl-parent input {
-    background-color: transparent;
+.table.fixed-table th.wl-col-tache,
+.table.fixed-table td.wl-col-tache {
+    min-width: 26rem;
 }
+
+@media (max-width: 900px) {
+    .wl-col-lot, .wl-col-phase, .wl-col-etape {
+        min-width: 6rem;
+        width: 8rem;
+    }
+
+    .wl-col-livrable, .wl-col-comment {
+        display: none;
+    }
+}*/
 

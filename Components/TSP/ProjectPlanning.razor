@@ -42,7 +42,14 @@
                 for (int m = 0; m < 12; m++)
                     totalParMois[m] += r.Months?[m] ?? 0m;
 
-                totalChargeTousProfils += r.ChargeJh ?? 0m;
+                var wl = Parent.WlGetProfilesPublic().FirstOrDefault(p =>
+                string.Equals(p.Name, r.Profil, StringComparison.OrdinalIgnoreCase));
+
+                var chargeProfil = wl is null
+                ? 0m
+                : Parent.WlTotalChargesForProfilePublic(wl.ProfileId);
+
+                totalChargeTousProfils += chargeProfil;
 
                 var pid = r.DbRowId ?? 0;
                 if (pid > 0)
@@ -83,7 +90,12 @@
                     <tbody>
                         @foreach (var row in project!.Profils)
                         {
-                            var chargeProfil = row.ChargeJh ?? 0m;
+                            var wl = Parent.WlGetProfilesPublic().FirstOrDefault(p =>
+                            string.Equals(p.Name, row.Profil, StringComparison.OrdinalIgnoreCase));
+
+                            var chargeProfil = wl is null
+                            ? 0m
+                            : Parent.WlTotalChargesForProfilePublic(wl.ProfileId);
                             var pid = row.DbRowId ?? 0;
 
                             decimal planifieToutesAnnees = 0m;
@@ -144,13 +156,16 @@
 
             foreach (var p in phasePlans)
             {
+                var chargePhase = Parent.WlTotalJHForPhasePublic(p.Phase);
+
                 for (int m = 0; m < 12; m++)
                     totalParMoisPhases[m] += p.Months?[m] ?? 0m;
 
-                totalChargePhases += p.ChargeJh ?? 0m;
+                totalChargePhases += chargePhase;
                 totalSaisieMoisPhases += (p.Months ?? Array.Empty<decimal?>()).Sum(v => v ?? 0m);
             }
             var totalEcartPhases = totalSaisieMoisPhases - totalChargePhases;
+
         }
 
         <div class="table-responsive mt-3">
@@ -170,25 +185,33 @@
                     @foreach (var p in Parent.PhasePlansPublic)
                     {
                         var sommeMois = (p.Months ?? Array.Empty<decimal?>()).Sum(v => v ?? 0m);
-                        var charge = p.ChargeJh ?? 0m;
+                        var charge = Parent.WlTotalJHForPhasePublic(p.Phase);
                         var ecart = sommeMois - charge;
 
                         <tr>
                             <td class="align-middle">@Parent.LabelPublic(p.Phase)</td>
                             <td class="text-end" style="width:120px">
-                                <InputNumber TValue="decimal?" class="form-control form-control-sm text-end" @bind-Value="p.ChargeJh" />
+                                @charge.ToString("N2")
                             </td>
-                            <td class="text-end @(ecart == 0 ? "" : (ecart > 0 ? "text-success" : "text-danger"))">@ecart.ToString("N2")</td>
+                            <td class="text-end @(ecart == 0 ? "" : (ecart > 0 ? "text-success" : "text-danger"))">
+                                @ecart.ToString("N2")
+                            </td>
+
                             @for (int m = 0; m < 12; m++)
                             {
                                 var mm = m;
                                 <td class="text-end">
-                                    <InputNumber TValue="decimal?" class="form-control form-control-sm text-end" @bind-Value="p.Months[mm]" />
+                                    <InputNumber TValue="decimal?" class="form-control form-control-sm text-end"
+                                                 Value="p.Months[mm]"
+                                                 ValueChanged="@(v => Parent.OnMonthChangedPublic(p, mm, v))"
+                                                 ValueExpression="@(() => p.Months[mm])" />
                                 </td>
                             }
                         </tr>
                     }
                 </tbody>
+
+
                 <tfoot class="table-primary">
                     <tr class="fw-semibold">
                         <td>TOTAL JH</td>

@@ -1341,7 +1341,8 @@ private void WlDeleteRow(WorkloadItem r)
     public decimal WlGrandTotalValuePublic(IReadOnlyList<WlProfile> profs) => WlGrandTotalValue(profs.ToList());
     public decimal WlTotalChargesForProfilePublic(int profileId) => WlTotalChargesForProfile(profileId);
     public decimal WlTotalValuesForProfilePublic(int profileId, decimal pricePerDay) => WlTotalValuesForProfile(profileId, pricePerDay);
-
+    public decimal WlTotalJHForPhasePublic(ProjectPhase phase) => WlTotalJHForPhase(phase);
+ 
     public decimal WlSumChargesPublic(WorkloadItem r, IReadOnlyList<WlProfile> profs) => WlSumCharges(r, profs.ToList());
     public decimal WlSumRowValuesPublic(WorkloadItem r, IReadOnlyList<WlProfile> profs) => WlSumRowValues(r, profs.ToList());
     public decimal WlSumChildrenChargesPublic(Guid parentId, int profileId) => WlSumChildrenCharges(parentId, profileId);
@@ -1360,6 +1361,14 @@ private void WlDeleteRow(WorkloadItem r)
     public void WlPropagateFromParentPublic(WorkloadItem parent, bool lot = true, bool groupCode = true)
     => WlPropagateFromParent(parent, lot, groupCode);
 
+    // --- Total JH pour une PHASE donnée (toutes charges de tous profils) ---
+    private decimal WlTotalJHForPhase(ProjectPhase phase)
+    {
+        return wlRows
+        .Where(r => !string.IsNullOrWhiteSpace(r.Phase))
+        .Where(r => TryParsePhase(r.Phase, out var ph) && ph == phase)
+        .Sum(r => r.ChargesByProfile.Values.Sum());
+    }
 
 
 // --- propagation Lot/GroupCode du parent vers enfants ---
@@ -1605,6 +1614,13 @@ else if (project is not null)
                     Planning & Jalons
                 </button>
             </li>
+                <li class="nav-item">
+                    <button class="nav-link @(activeTab == "ventilation" ? "active" : "")"
+                            @onclick='() => activeTab = "ventilation"'>
+                        Ventilation des charges
+                    </button>
+                </li>
+
         </ul>
     </div>
 
@@ -1626,18 +1642,20 @@ else if (project is not null)
 
     else if (activeTab == "resources")
     {
-        <ProjectResources Rows="project?.Profils"
-                          RemiseTjmPercent="project?.RemiseTjmPercent"
-                          ProjectTjms="projectTjms"
-                          OnAddRow="AddProfilRow"
-                          OnSave="SaveResources"
-                          OnRemoveRow="RemoveProfilRow"
-                          OnRecompute="RecomputeAll"
-                          OnRemiseChanged="@( (decimal? v) => { project!.RemiseTjmPercent = v; RecomputeAll(); } )"
-                          Money="Money"
-                          Num="Num"
-                          Pct="Pct"
-                          RenderRefTableSimple="RenderRefTableSimple" />
+            <ProjectResources Parent="this"
+                              Rows="project?.Profils"
+                              RemiseTjmPercent="project?.RemiseTjmPercent"
+                              ProjectTjms="projectTjms"
+                              OnAddRow="AddProfilRow"
+                              OnSave="SaveResources"
+                              OnRemoveRow="RemoveProfilRow"
+                              OnRecompute="RecomputeAll"
+                              OnRemiseChanged="@( (decimal? v) => { project!.RemiseTjmPercent = v; RecomputeAll(); } )"
+                              Money="Money"
+                              Num="Num"
+                              Pct="Pct"
+                              RenderRefTableSimple="RenderRefTableSimple" />
+
     }
 
     @* --- Onglet 4 : workload --- *@
@@ -1660,6 +1678,12 @@ else if (project is not null)
     {
         <ProjectPlanning Parent="this" />
     }
+
+        @* --- Onglet 7 : Ventilation des charges --- *@
+        else if (activeTab == "ventilation")
+        {
+            <ProjectVentilation Parent="this" />
+        }
 
     
 }

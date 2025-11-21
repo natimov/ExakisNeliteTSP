@@ -1,0 +1,400 @@
+﻿@* ProjectVentilation.razor *@
+@using System.Linq
+@using ExakisNeliteTSP.Models
+@using ExakisNeliteTSP.Components.Pages
+
+@code {
+    [Parameter] public TSProjet Parent { get; set; } = default!;
+
+    // Profils utilisés dans le Workload (Project Manager, Architecte, etc.)
+    private IReadOnlyList<TSProjet.WlProfile> Profiles =>
+        Parent?.WlGetProfilesPublic() ?? Array.Empty<TSProjet.WlProfile>();
+
+    // Lignes "feuilles" du workload (uniquement les tâches, pas les parents)
+    private IEnumerable<WorkloadItem> LeafRows =>
+        Parent?.WlOrderedRowsPublic().Where(r => r.ParentId is not null)
+        ?? Enumerable.Empty<WorkloadItem>();
+
+    // Liste des phases (Pilotage, Conception, Construction, …)
+    private IReadOnlyList<ProjectPhase> Phases =>
+        Enum.GetValues<ProjectPhase>()
+            .Where(p => p != ProjectPhase.None)
+            .ToList();
+
+    // Liste des étapes (Pilotage projet, Analyse de l’existant, …)
+    private IReadOnlyList<ProjectEtape> Steps =>
+        Enum.GetValues<ProjectEtape>()
+            .Where(e => e != ProjectEtape.None)
+            .ToList();
+
+    // --- Helpers communs ---
+
+    // JH pour une (phase, profil)
+    private decimal JhForPhaseAndProfile(ProjectPhase phase, TSProjet.WlProfile profile)
+    {
+        decimal sum = 0m;
+
+        foreach (var r in LeafRows)
+        {
+            if (string.IsNullOrWhiteSpace(r.Phase))
+                continue;
+
+            if (!Enum.TryParse<ProjectPhase>(r.Phase, ignoreCase: true, out var ph))
+                continue;
+
+            if (ph != phase)
+                continue;
+
+            if (r.ChargesByProfile.TryGetValue(profile.ProfileId, out var v))
+                sum += v;
+        }
+
+        return sum;
+    }
+
+    // TJM d’un profil (basé sur le TJM calculé dans TSProjet)
+    private decimal TjmForProfile(TSProjet.WlProfile profile)
+        => profile.PricePerDay;   // adapte ici si le nom de prop diffère
+
+    // Montant € pour une (phase, profil)
+    private decimal AmountForPhaseAndProfile(ProjectPhase phase, TSProjet.WlProfile profile)
+        => JhForPhaseAndProfile(phase, profile) * TjmForProfile(profile);
+
+    // Total JH d’une phase (tous profils)
+    private decimal TotalJhPhase(ProjectPhase phase)
+        => Profiles.Sum(p => JhForPhaseAndProfile(phase, p));
+
+    // Montant total d’une phase (tous profils)
+    private decimal TotalAmountPhase(ProjectPhase phase)
+        => Profiles.Sum(p => AmountForPhaseAndProfile(phase, p));
+
+    // Total JH par profil (toutes phases / toutes étapes)
+    private decimal TotalJhProfile(TSProjet.WlProfile profile)
+    {
+        decimal sum = 0m;
+        foreach (var r in LeafRows)
+        {
+            if (r.ChargesByProfile.TryGetValue(profile.ProfileId, out var v))
+                sum += v;
+        }
+        return sum;
+    }
+
+    // Montant total par profil (toutes phases)
+    private decimal TotalAmountProfile(TSProjet.WlProfile profile)
+        => TotalJhProfile(profile) * TjmForProfile(profile);
+
+    // Totaux globaux
+    private decimal GlobalJh => Profiles.Sum(p => TotalJhProfile(p));
+    private decimal GlobalAmount => Profiles.Sum(p => TotalAmountProfile(p));
+
+    // TJM global (montant total / JH total)
+    private decimal GlobalTjm => GlobalJh > 0 ? GlobalAmount / GlobalJh : 0m;
+
+    // TJM d’une phase (montant phase / JH phase)
+    private decimal TjmPhase(ProjectPhase phase)
+    {
+        var jh = TotalJhPhase(phase);
+        if (jh <= 0) return 0m;
+        var amount = TotalAmountPhase(phase);
+        return amount / jh;
+    }
+
+    // ---------- PARTIE "PAR ÉTAPE" ----------
+
+    // JH pour une (étape, profil)
+    private decimal JhForStepAndProfile(ProjectEtape step, TSProjet.WlProfile profile)
+    {
+        decimal sum = 0m;
+
+        foreach (var r in LeafRows)
+        {
+            if (string.IsNullOrWhiteSpace(r.Etape))
+                continue;
+
+            if (!Enum.TryParse<ProjectEtape>(r.Etape, ignoreCase: true, out var et))
+                continue;
+
+            if (et != step)
+                continue;
+
+            if (r.ChargesByProfile.TryGetValue(profile.ProfileId, out var v))
+                sum += v;
+        }
+
+        return sum;
+    }
+
+    // Total JH pour une étape (tous profils)
+    private decimal TotalJhStep(ProjectEtape step)
+        => Profiles.Sum(p => JhForStepAndProfile(step, p));
+}
+
+@if (Parent is null)
+{
+    <div class="text-danger">Ventilation : parent introuvable.</div>
+}
+else
+{
+    var hasData = LeafRows.Any() && Profiles.Count > 0;
+
+    <div class="card shadow-sm">
+        <div class="card-header">
+            <span>Ventilation des charges</span>
+        </div>
+
+        <div class="card-body">
+            @* ======================================================= *@
+            @* 1) Ventilation des charges par phase                    *@
+            @* ======================================================= *@
+
+            <h6 class="fw-semibold mb-2">Ventilation des charges par phase</h6>
+
+            @if (!hasData)
+            {
+                <div class="text-muted">Aucune donnée de workload pour le moment.</div>
+            }
+            else
+            {
+                <div class="table-responsive mb-4">
+                    <table class="table table-sm align-middle">
+                        <thead class="table-primary">
+                            <tr>
+                                <th>PHASE</th>
+
+                                @foreach (var p in Profiles)
+                                {
+                                    <th class="text-end">
+                                        @p.Name<br />
+                                        <small>(JH)</small>
+                                    </th>
+                                }
+
+                                <th class="text-end">Total</th>
+                                <th class="text-end">TJM</th>
+                            </tr>
+                        </thead>
+
+                        <tbody>
+                            @foreach (var phase in Phases)
+                            {
+                                var totalJh = TotalJhPhase(phase);
+                                if (totalJh == 0m)
+                                {
+                                    // Si tu veux toujours afficher toutes les phases, commente ce "continue;"
+                                    continue;
+                                }
+
+                                var tjmPhase = TjmPhase(phase);
+
+                                <tr>
+                                    <td>@Parent.LabelPhasePublic(phase)</td>
+
+                                    @foreach (var profile in Profiles)
+                                    {
+                                        var v = JhForPhaseAndProfile(phase, profile);
+                                        <td class="text-end">@v.ToString("N2")</td>
+                                    }
+
+                                    <td class="text-end fw-semibold">@totalJh.ToString("N2")</td>
+                                    <td class="text-end fw-semibold">@tjmPhase.ToString("N0") €</td>
+                                </tr>
+                            }
+                        </tbody>
+
+                        <tfoot class="table-light">
+                            @* Ligne "Charges" (JH) *@
+                            <tr class="fw-semibold">
+                                <td>Charges</td>
+
+                                @foreach (var profile in Profiles)
+                                {
+                                    var jh = TotalJhProfile(profile);
+                                    <td class="text-end">@jh.ToString("N2")</td>
+                                }
+
+                                <td class="text-end">@GlobalJh.ToString("N2")</td>
+                                <td class="text-end">@GlobalTjm.ToString("N0") €</td>
+                            </tr>
+
+                            @* Ligne "Montants" (€) *@
+                            <tr class="fw-semibold">
+                                <td>Montants</td>
+
+                                @foreach (var profile in Profiles)
+                                {
+                                    var amount = TotalAmountProfile(profile);
+                                    <td class="text-end">@amount.ToString("N0") €</td>
+                                }
+
+                                <td class="text-end">@GlobalAmount.ToString("N0") €</td>
+                                <td class="text-end"></td> @* pas de TJM ici, comme sur l’Excel *@
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+
+               
+
+                @* ======================================================= *@
+                @* 3) Ventilation des couts par profil                    *@
+                @* ======================================================= *@
+
+                <h6 class="fw-semibold mb-2">Ventilation des couts par profil</h6>
+
+                <div class="table-responsive mb-2">
+                    <table class="table table-sm align-middle">
+                        <thead class="table-primary">
+                            <tr>
+                                <th>PHASE</th>
+
+                                @foreach (var p in Profiles)
+                                {
+                                    <th class="text-end">
+                                        @p.Name<br />
+                                        <small>(Montant)</small>
+                                    </th>
+                                }
+
+                                <th class="text-end">Montants</th>
+                            </tr>
+                        </thead>
+
+                        <tbody>
+                            @foreach (var phase in Phases)
+                            {
+                                var totalAmountPhase = TotalAmountPhase(phase);
+
+                                <tr>
+                                    <td>@Parent.LabelPhasePublic(phase)</td>
+
+                                    @foreach (var profile in Profiles)
+                                    {
+                                        var val = AmountForPhaseAndProfile(phase, profile);
+                                        <td class="text-end">
+                                            @(val == 0m ? "" : val.ToString("N0") + " €")
+                                        </td>
+                                    }
+
+                                    <td class="text-end fw-semibold">
+                                        @(totalAmountPhase == 0m ? "" : totalAmountPhase.ToString("N0") + " €")
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+
+                        <tfoot class="table-light">
+                            <tr class="fw-semibold">
+                                <td>TOTAL</td>
+
+                                @foreach (var profile in Profiles)
+                                {
+                                    var amount = TotalAmountProfile(profile);
+                                    <td class="text-end">
+                                        @(amount == 0m ? "" : amount.ToString("N0") + " €")
+                                    </td>
+                                }
+
+                                <td class="text-end">@GlobalAmount.ToString("N0") €</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+
+
+                @* ======================================================= *@
+                @* 2) Ventilation des charges par étape                   *@
+                @* ======================================================= *@
+
+                <h6 class="fw-semibold mb-2">Ventilation des charges par étape</h6>
+
+                <div class="table-responsive mb-4">
+                    <table class="table table-sm align-middle">
+                        <thead class="table-primary">
+                            <tr>
+                                <th>ETAPE</th>
+
+                                @foreach (var p in Profiles)
+                                {
+                                    <th class="text-end">
+                                        @p.Name<br />
+                                        <small>(JH)</small>
+                                    </th>
+                                }
+
+                                <th class="text-end">Charges</th>
+                            </tr>
+                        </thead>
+
+                        <tbody>
+                            @foreach (var step in Steps)
+                            {
+                                var totalJhStep = TotalJhStep(step);
+
+                                <tr>
+                                    <td>@Parent.LabelEtapePublic(step)</td>
+
+                                    @foreach (var profile in Profiles)
+                                    {
+                                        var v = JhForStepAndProfile(step, profile);
+                                        <td class="text-end">
+                                            @(v == 0m ? "" : v.ToString("N2"))
+                                        </td>
+                                    }
+
+                                    <td class="text-end fw-semibold">
+                                        @(totalJhStep == 0m ? "" : totalJhStep.ToString("N2"))
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+
+
+                        <tfoot class="table-light">
+                            <tr class="fw-semibold">
+                                <td>TOTAL</td>
+
+                                @foreach (var profile in Profiles)
+                                {
+                                    var jh = TotalJhProfile(profile);
+                                    <td class="text-end">@jh.ToString("N2")</td>
+                                }
+
+                                <td class="text-end">@GlobalJh.ToString("N2")</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            }
+        </div>
+    </div>
+}
