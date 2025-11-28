@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace ExakisNeliteTSP.Models
 {
@@ -19,8 +20,9 @@ namespace ExakisNeliteTSP.Models
         public decimal? Cjm { get; set; }                       // E (€/j)
         public decimal? Prcs { get; set; }                      // F (€/j) (BO=440; BO_XP/ACHAT_BO=0.8*TJM; autres: laissé)
         public decimal? FraisDeplacementSiCession { get; set; } // G (€)
-        public decimal? TciOverPrcs { get; set; }               // H (€/j) (calculé par logique d'entité)
-        public decimal? ChargeJh { get; set; }                  // I (jh)
+        public decimal? TciOverPrcs { get; set; }
+        // H (€/j) (calculé par logique d'entité)
+        [NotMapped] public decimal? ChargeJh { get; set; }                  // I (jh)
 
         // --- Calculs (affichage only) ---
         public decimal? CaEuro { get; set; }                    // J = Charge * TJM * (1 - Remise)

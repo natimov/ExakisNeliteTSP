@@ -338,6 +338,11 @@
 
     private List<WorkloadItem> wlRows = new();
 
+        // Charge "métier" toutes années : utilisée par la Synthèse
+        private decimal GetChargeAllYears(ProfilEntry r)
+        {
+            return r.ChargeJh ?? 0m;
+        }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -386,6 +391,16 @@
                     wlRows.Add(created);
                     wlSelected = created;
                 }
+                    wlRows = await WorkloadService.LoadAsync(project.Id);
+                    if (wlRows.Count == 0)
+                    {
+                        var created = await WorkloadService.CreateParentAsync(project.Id, 1);
+                        wlRows.Add(created);
+                        wlSelected = created;
+                    }
+
+                    // ✅ nettoyage des charges orphelines (charges liées à d'anciens profils)
+                    CleanOrphanWorkloadAllocations();
 
 
 
@@ -447,12 +462,16 @@
 
                 // === FIN CHARGEMENT JH MULTI-ANNEES ===
 
-                // 6) Maintenant qu’on a _jhAllYears, on hydrate l’UI de l’année visible
-                await LoadPlanningYearAsync(currentYear);
+                    // 6) Maintenant qu’on a _jhAllYears, on hydrate l’UI de l’année visible
+                    await LoadPlanningYearAsync(currentYear);
 
-                // 7) Recalculs d’affichage
-                ProfilComputeService.ComputeAll(project);
+                    // ✅ 6bis) on synchronise les charges depuis Workload
+                    SyncChargesFromWorkload();
+
+                    // 7) Recalculs d’affichage
+                    ProfilComputeService.ComputeAll(project);
                     RebuildSynthese();
+
 
                 var map = FaeBuildCoutEngageCumul();
 
@@ -700,6 +719,37 @@ private Task GoPrevYearAsync() => ChangeYearAsync(-1);
     private static string Num(decimal? v) => v is null ? "" : v.Value.ToString("N2");
     private static string Pct(decimal? v) => v is null ? "" : (v.Value * 100m).ToString("N2") + " %";
 
+        // ==============================
+        // SYNC CHARGES WORKLOAD -> PROFILS
+        // (fidèle Excel : Workload = vérité,
+        // Planning = ventilation optionnelle)
+        // ==============================
+        private void SyncChargesFromWorkload()
+        {
+            if (project?.Profils is null) return;
+
+            foreach (var r in project.Profils)
+            {
+                if (r.DbRowId is not int pid) continue;
+
+                // 1) charge issue du planning (ventilation mensuelle)
+                var plannedAllYears = GetPlannedAllYears(r);     // peut être 0 si planning vide
+
+                // 2) charge issue du workload (source de vérité)
+                var workloadTotal = WlTotalChargesForProfile(pid);
+
+                // 3) règle Excel :
+                // si planning rempli => on prend planned
+                // sinon => on prend workload
+                var finalCharge = plannedAllYears > 0 ? plannedAllYears : workloadTotal;
+
+                r.ChargeJh = finalCharge;
+            }
+        }
+
+
+
+
     private void AddProfilRow()
     {
         if (project is null) return;
@@ -731,41 +781,56 @@ private Task GoPrevYearAsync() => ChangeYearAsync(-1);
         RecomputeAll();
     }
 
-    private void RecomputeAll()
-    {
-        if (project is null) return;
-        ProfilComputeService.ComputeAll(project);
-        StateHasChanged();
-    }
-
-
-    private async Task SaveResources()
-    {
-        if (project is null) return;
-
-        try
+        private void RecomputeAll()
         {
-            // 1) Recalcul pour être sûr que tout est cohérent
+            if (project is null) return;
+
+            // On NE TOUCHE PAS aux charges ici.
+            // On recalcule juste les coûts / marges à partir des profils existants.
+
             ProfilComputeService.ComputeAll(project);
+            RebuildSynthese();
+            StateHasChanged();
+        }
 
-            // 2) Sauvegarde des lignes Profil dans la table ProjectProfilRows
-            await ProfilRowsSvc.SaveProfilEntriesAsync(project.Id, project.Profils);
 
-            // 3) MAJ de la fiche projet (ex. RemiseTjmPercent, LastUpdated, etc.)
-            project.LastUpdated = DateTime.UtcNow;
-            await Projects.UpdateAsync(project);
 
-            // (optionnel) recharger depuis la BDD pour être pile-poil aligné
-            project.Profils = await ProfilRowsSvc.LoadProfilEntriesAsync(project.Id);
-            ProfilComputeService.ComputeAll(project);
+
+
+        private async Task SaveResources()
+        {
+            if (project is null) return;
+
+            try
+            {
+                // 1) Recalcul Excel-like (CA, coûts, marges) à partir des profils
+                //    (on ne touche PAS aux charges JH ici)
+                ProfilComputeService.ComputeAll(project);
+
+                // 2) Sauvegarde des profils tels qu'ils sont en mémoire.
+                await ProfilRowsSvc.SaveProfilEntriesAsync(project.Id, project.Profils);
+
+                // 3) MAJ fiche projet
+                project.LastUpdated = DateTime.UtcNow;
+                await Projects.UpdateAsync(project);
+
+                // ⚠️ Surtout PAS de rechargement :
+                // ❌ project.Profils = await ProfilRowsSvc.LoadProfilEntriesAsync(project.Id);
+
+                // 4) Recalcul final + synthèse
+                ProfilComputeService.ComputeAll(project);
                 RebuildSynthese();
+            }
+            catch (Exception ex)
+            {
+                error = "Erreur lors de l'enregistrement : " + ex.Message;
+            }
+        }
 
-        }
-        catch (Exception ex)
-        {
-            error = "Erreur lors de l'enregistrement : " + ex.Message;
-        }
-    }
+
+
+
+
     // --- Planning : ventilation mensuelle par PHASE (UI only) ---
         // APRÈS  ✅
         public sealed class PhasePlan
@@ -1099,9 +1164,16 @@ private async Task SaveWorkloadAsync()
                 foreach (var kv in row.ChargesByProfile)
                     await WorkloadService.UpdateAllocationAsync(row.Id, kv.Key, kv.Value);
 
-            // 3) Recharger depuis la BD (facultatif mais propre)
+            // 3) Recharger depuis la BD
             wlRows = await WorkloadService.LoadAsync(project.Id);
             lastSavedAt = DateTime.Now;
+            CleanOrphanWorkloadAllocations();
+
+
+            // 4) Mettre à jour les profils et la synthèse avec ces nouvelles charges
+            SyncChargesFromWorkload();
+            ProfilComputeService.ComputeAll(project!);
+            RebuildSynthese();
         }
         catch (Exception ex)
         {
@@ -1112,7 +1184,37 @@ private async Task SaveWorkloadAsync()
             saving = false;
             StateHasChanged();
         }
+
 }
+
+    // Nettoie les charges Workload qui pointent vers des profils qui n'existent plus
+    private void CleanOrphanWorkloadAllocations()
+    {
+        if (project?.Profils is null || wlRows is null) return;
+
+        // IDs de profils encore valides
+        var validIds = new HashSet<int>(
+        project.Profils
+        .Where(p => p.DbRowId is int)
+        .Select(p => (int)p.DbRowId)
+        );
+
+        foreach (var row in wlRows)
+        {
+            if (row.ChargesByProfile is null) continue;
+
+            // on supprime les entrées dont le profilId n'existe plus
+            var orphanKeys = row.ChargesByProfile.Keys
+            .Where(id => !validIds.Contains(id))
+            .ToList();
+
+            foreach (var key in orphanKeys)
+            {
+                row.ChargesByProfile.Remove(key);
+            }
+        }
+    }
+
 
 // couleurs 
 private static string PhaseCss(string? phase)
@@ -1532,7 +1634,7 @@ private void OnEtapeChanged(WorkloadItem row, ChangeEventArgs e)
         wlRows,       // tes WorkloadItem (la méthode de mapping ignore le détail pour l’instant)
         achatItem,    // List<AchatItem>
         frais,        // List<FraisItem>
-        GetPlannedAllYears // TA méthode déjà présente: decimal GetPlannedAllYears(ProfilEntry r)
+        GetChargeAllYears  
         );
         StateHasChanged();
     }

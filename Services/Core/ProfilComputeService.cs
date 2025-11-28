@@ -11,10 +11,14 @@ namespace ExakisNeliteTSP.Services.Core
         private static decimal Safe(decimal? v) => v ?? 0m;
         private static decimal Div(decimal num, decimal den) => den == 0m ? 0m : num / den;
 
+
+
+
         /// <summary>
         /// Reproduit les formules Excel pour une ligne de PROFIL.
         /// N'altère pas les champs "saisie" (Profil, Entite, TJM, CJM, Charge, Frais...) ; calcule le reste.
         /// </summary>
+        /// 
         public static void ComputeRow(Project project, ProfilEntry r)
         {
             if (project is null || r is null) return;

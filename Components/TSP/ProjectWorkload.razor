@@ -1,8 +1,7 @@
-﻿@* ProjectWorkload.razor — version Option 1 (wrappers Public côté parent) *@
-@using System.Globalization
+﻿@using System.Globalization
 @using ExakisNeliteTSP.Models
 @using ExakisNeliteTSP.Services
-@using ExakisNeliteTSP.Components.Pages  @* ⬅️ adapte ce namespace si TSProjet n’est pas dans Pages *@
+@using ExakisNeliteTSP.Components.Pages  
 
 @code {
     [Parameter] public TSProjet Parent { get; set; } = default!;

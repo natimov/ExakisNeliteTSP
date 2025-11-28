@@ -154,19 +154,11 @@
                                     </td>
 
                                     @{
-                                        decimal chargeProfil = 0m;
-
-                                        if (Parent != null)
-                                        {
-                                            var wlProfiles = Parent.WlGetProfilesPublic();
-                                            var wl = wlProfiles.FirstOrDefault(p => string.Equals(row.Profil, p.Name, StringComparison.OrdinalIgnoreCase));
-
-                                            if (wl != null)
-                                            {
-                                                chargeProfil = Parent.WlTotalChargesForProfilePublic(wl.ProfileId);
-                                            }
-                                        }
+                                        // lecture seule : on ne modifie PLUS le modèle ici
+                                        decimal chargeProfil = row.ChargeJh ?? 0m;
                                     }
+
+
 
                                     <!-- Charge (jh) -->
                                     <td>
